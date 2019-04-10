@@ -557,7 +557,7 @@ class OvpnCmdConn(CommandConnection):
             ret_fidx = params['ret_file_idx']
             config_fidx = params['config_file_idx']
             server_name = params['daemon_name']
-        except KeyError, exc:
+        except KeyError as exc:
             self.send_cmd('FAIL')
             self._log.warning('command "%s" is missing a parameter: %s', cmd,
                     exc.args)
@@ -566,11 +566,11 @@ class OvpnCmdConn(CommandConnection):
         try:
             ret_f = files[int(ret_fidx)]
             config_f = files[int(config_fidx)]
-        except IndexError, exc:
+        except IndexError as exc:
             self.send_cmd('FAIL')
             self._log.warning('file descriptor index out of range: %s', exc.args)
             return
-        except ValueError, exc:
+        except ValueError as exc:
             self.send_cmd('FAIL')
             self._log.warning('file descriptor index parsing failed: %s',
                     exc.args)
@@ -619,7 +619,7 @@ class OvpnCmdConn(CommandConnection):
         try:
             full_username = params['full_username']
             server_name = params['daemon_name']
-        except KeyError, exc:
+        except KeyError as exc:
             self.send_cmd('FAIL')
             self._log.warning('command "%s" is missing a parameter: %s', cmd,
                     exc.args)
@@ -942,7 +942,7 @@ def load_requestors(sloop, requestor_mgr, realms_data):
                     listen_device=realm_data.dhcp_listening_device)
             sloop.add_socket_handler(requestor)
             requestor_mgr.add_requestor(requestor)
-    except odr.listeningsocket.SocketLocalAddressBindFailed, ex:
+    except odr.listeningsocket.SocketLocalAddressBindFailed as ex:
         logging.error('Could not bind to DHCP listening address %s:%d@%s',
                 ex.args[0], ex.args[1], ex.args[2])
         return False
