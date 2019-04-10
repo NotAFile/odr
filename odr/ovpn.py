@@ -111,7 +111,7 @@ class OvpnServer(object):
         sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
         try:
             sock.connect(self._socket_fn)
-        except socket.error, e:
+        except socket.error as e:
             self.log.error('connection to OpenVPN server "%s" failed: %s' % (
                     self.name, e))
             sock.close()
@@ -182,7 +182,7 @@ class OvpnServer(object):
     def _send_cmd(self, cmd):
         try:
             self._socket.send(cmd.replace('\n', '\\n') + '\n')
-        except socket.error, e:
+        except socket.error as e:
             if e.args[0] == errno.EPIPE:
                 self.log.error('socket for OpenVPN server "%s" was ' \
                         'unexpectedly closed' % self.name)

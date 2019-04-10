@@ -55,7 +55,7 @@ class ListeningSocket(object):
 
         try :
             self._socket.bind((self.listen_address, self.listen_port))
-        except socket.error, msg:
+        except socket.error as msg:
             err = msg.args[0]
             if err == errno.EADDRNOTAVAIL:
                 raise SocketLocalAddressNotAvailable(

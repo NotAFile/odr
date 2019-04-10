@@ -64,7 +64,7 @@ class SocketLoop(object):
             try:
                 ready_input_sockets, _, _ = select.select(self.sockets, [], [],
                         self.timeout)
-            except select.error, ex:
+            except select.error as ex:
                 if ex.args[0] == errno.EINTR:
                     continue
                 else:

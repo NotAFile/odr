@@ -157,7 +157,7 @@ class CommandConnectionListener(object):
     ACCEPT_QUEUE_LEN = 32
 
     def __init__(self, sloop, cmd_conn_factory, socket_path,
-                socket_perm_mode=0666, auth_check=None):
+                socket_perm_mode=0o666, auth_check=None):
         """Opens the POSIX Local IPC Socket.  If the file already exists, it
         is deleted first.  The file permissions are set according to the
         socket_perm_mode parameter.
@@ -201,8 +201,8 @@ class CommandConnectionListener(object):
         """
         try:
             sock, _ = self._socket.accept()
-        except IOError, e:
-            print "Received exception %s while accepting new cmd conn" % repr(e)
+        except IOError as e:
+            print("Received exception %s while accepting new cmd conn" % repr(e))
             return
         self._log.debug('received a new connection')
         sock.setblocking(False)
