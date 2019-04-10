@@ -29,7 +29,7 @@ class WeakBoundMethod(object):
 
         >>> class Example(object):
         ...     def print_num(self, a_number):
-        ...         print "%d" % a_number
+        ...         print(a_number)
 
     We can create an example instance and create a weak reference to the bound
     print_num method:
