@@ -68,8 +68,8 @@ class WeakBoundMethod(object):
                 collected object should be ignored or raise a ReferenceError.
                 Defaults to False.
         """
-        self._free_method = bound_method.im_func
-        self._weak_instance = weakref.ref(bound_method.im_self)
+        self._free_method = bound_method.__func__
+        self._weak_instance = weakref.ref(bound_method.__self__)
         self._ignore_emptiness = ignore_emptiness
 
     def __call__(self, *args, **kwargs):
