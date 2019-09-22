@@ -1,0 +1,146 @@
+odr (0.14-1) fsmi-squeeze; urgency=low
+
+  * odr/cmdconnection.py: don't pass arguments to object.__init__
+  * debian/control: bump standards-version to 3.9.2
+
+ -- Philipp Kern <pkern@debian.org>  Sun, 26 Jun 2011 00:02:39 +0200
+
+odr (0.13-1) fsmi-lenny; urgency=low
+
+  * odrd: fix logic error: in -> not in
+
+ -- Philipp Kern <pkern@debian.org>  Sun, 05 Dec 2010 17:34:22 +0100
+
+odr (0.12-1) fsmi-lenny; urgency=low
+
+  [ Philipp Kern ]
+  * odr/dhcprequestor.py: implement renewal/rebinding defaults
+  * odr/dhcprequestor.py: cast _start_time to int
+  * odrd: correct a typo in a log message
+  * odr/dhcprequestor.py: convert docstrings to Sphinx format
+  * docs: add Sphinx documentation build system
+  * TODO: move to docs/TODO.rst
+  * docs/index.rst: update intro, features, reqs
+  * odr/machasher.py: not needed anymore
+  * docs: add odr.cmdconnection
+
+  [ Fabian Knittel ]
+  * odr/dhcprequestor.py: make sure failed DHCP packet handling does not
+    drop the socket handler
+  * odrd: check existance of DHCP request params before usage
+
+  [ Philipp Kern ]
+  * odrd: fix syntax error: else if -> elif
+  * odr/dhcprequestor.py: refactor socket creation into ListeningSocket
+  * odr/timeoutmgr.py: clarify documentation of add_*_timeout
+  * .gbp.conf: added for git-buildpackage
+  * debian/control: add myself as an uploader
+
+ -- Philipp Kern <pkern@debian.org>  Sun, 05 Dec 2010 17:21:28 +0100
+
+odr (0.11-1) fsmi-lenny; urgency=low
+
+  * New upstream release:
+    + Allow logging to syslog.
+
+ -- Fabian Knittel <fabian.knittel@avona.com>  Thu, 20 May 2010 00:50:21 +0200
+
+odr (0.10-1) fsmi-lenny; urgency=low
+
+  * New upstream release:
+    + Bugfix: Stop removing and re-adding detected clients.  (Caused by bug
+      in multi-server code.)
+
+ -- Fabian Knittel <fabian.knittel@avona.com>  Wed, 19 May 2010 19:57:37 +0200
+
+odr (0.9-1) fsmi-lenny; urgency=low
+
+  * New upstream release:
+    + Add "include_realm" option to include realms into one-another.
+    + Deal with realms specifying the same device and local IP address.
+    + Always try to push route-gateway (even in the non-provide_default_route
+      case).
+  * Call "update-python-modules -p" in postinst before starting odrd.
+
+ -- Fabian Knittel <fabian.knittel@avona.com>  Wed, 19 May 2010 19:31:22 +0200
+
+odr (0.8-1) fsmi-lenny; urgency=low
+
+  * New upstream release:
+    + DHCP packets and states more standards compliant in various ways.
+    + Uses full_username as client_identifier instead of creating a fake MAC
+      address.
+    + Randomised exponential backoff algorithm for DHCP resending.
+    + DHCP lease tracking and refreshing.
+    + Hook script odr-ovpn renamed to odr-ovpn-connect.
+    + Added hook script odr-ovpn-disconnect.
+    + Support classless static routes via DHCP (RFC 3442).
+    + Add per-realm switch "provide_default_route".
+    + Static routes and default route definable per realm.
+
+ -- Fabian Knittel <fabian.knittel@avona.com>  Tue, 18 May 2010 23:19:07 +0200
+
+odr (0.7-1) fsmi-lenny; urgency=low
+
+  * New upstream release:
+    + allow username to omit the realm - add default realm
+    + vid optional in realm (allows use of odr in non-vlan environments)
+    + DHCP servers may be specified as hostnames (looked-up at start-up time).
+
+ -- Fabian Knittel <fabian.knittel@avona.com>  Wed, 12 May 2010 18:30:45 +0200
+
+odr (0.6-2) fsmi-lenny; urgency=low
+
+  * Make /etc/sv/odr/run and /etc/sv/odr/log/run executable again.  Was broken
+    since switch to source version 1.0.
+
+ -- Fabian Knittel <fabian.knittel@avona.com>  Mon, 10 May 2010 18:53:40 +0200
+
+odr (0.6-1) fsmi-lenny; urgency=low
+
+  * New upstream release:
+    + Also allow username/groupname instead of only uid/gid in config file.
+  * Switch to source version 1.0
+
+ -- Fabian Knittel <fabian.knittel@avona.com>  Mon, 10 May 2010 12:34:21 +0200
+
+odr (0.5-1) local; urgency=low
+
+  * New upstream release:
+    + Fix DHCP multi-server support.
+
+ -- Fabian Knittel <fabian.knittel@avona.com>  Thu, 06 May 2010 16:04:41 +0200
+
+odr (0.4-1) local; urgency=low
+
+  * New upstream release:
+    + Various configuration options optional now.
+    + Optionally auto-detects IP-adress from given interface.
+  * Add dependency on python-netifaces.
+
+ -- Fabian Knittel <fabian.knittel@avona.com>  Thu, 06 May 2010 13:15:05 +0200
+
+odr (0.3-1) local; urgency=low
+
+  * New upstream release:
+    + Updated to new CC_RET_FAILED, CC_RET_SUCCEEDED and CC_RET_DEFERRED
+      values.
+
+ -- Fabian Knittel <fabian.knittel@avona.com>  Tue, 04 May 2010 15:40:59 +0200
+
+odr (0.2-1) fsmi-squeeze; urgency=low
+
+  * New upstream release:
+    + Avoids all access permission problems by extensively using credential
+      verification and (file) credential passing for UNIX sockets.
+  * Add new dependency on python-fdsend.
+  * Create /var/run/odr with 0755 instead of 0770, as odrd now handles access
+    control itsself.
+
+ -- Fabian Knittel <fabian.knittel@avona.com>  Mon, 03 May 2010 23:13:19 +0200
+
+odr (0.1-1) fsmi-squeeze; urgency=low
+
+  * Initial release.
+
+ -- Fabian Knittel <fabian.knittel@avona.com>  Tue, 27 Apr 2010 15:18:08 +0200
