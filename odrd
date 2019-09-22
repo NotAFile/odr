@@ -403,7 +403,7 @@ class OvpnCmdConn(CommandConnection):
     """Represents an incoming command connection from one of the OpenVPN
     hooks.
     """
-    def __init__(self, sloop, sock, realms_data, servers, add_request_clb,
+    def __init__(self, sloop, sock, realms_data, servers, secret, add_request_clb,
             parse_username_clb, create_client_clb, remove_client_clb):
         """\
         @param sloop: Socket loop instance.  (See CommandConnection for
@@ -425,6 +425,7 @@ class OvpnCmdConn(CommandConnection):
                 log=logging.getLogger('ovpncmdconn'))
         self._realms_data = realms_data
         self._servers = servers
+        self._secret = secret
         self._add_request = add_request_clb
         self._parse_username = parse_username_clb
         self._create_client = create_client_clb
@@ -1053,6 +1054,7 @@ def main():
         return OvpnCmdConn(sloop, sock,
                 realms_data=realms_data,
                 servers=servers,
+                secret=cfg_get_def(cfg, 'daemon', 'secret', None),
                 create_client_clb=client_mgr.create_client,
                 remove_client_clb=client_mgr.client_disconnected,
                 add_request_clb=start_dhcp_address_request,
