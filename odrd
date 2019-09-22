@@ -33,6 +33,9 @@ import random
 from optparse import OptionParser
 from ConfigParser import SafeConfigParser
 from functools import partial
+import datetime
+import hashlib
+from netaddr import IPNetwork
 
 import odr.ovpn as ovpn
 from odr.cmdconnection import CommandConnection, CommandConnectionListener
@@ -483,6 +486,22 @@ class OvpnCmdConn(CommandConnection):
                 res['subnet_mask']))
         self._config_f.write('push "ip-win32 dynamic"\n')
 
+        if self._realm_data.subnet_ipv6 is not None:
+            prefix = self._realm_data.subnet_ipv6
+            today = str(datetime.date.today())
+            m = hashlib.sha1()
+            m.update((self._full_username + today + self._secret).encode('utf-8'))
+            h = m.hexdigest()[:16]
+            p = IPNetwork(prefix).ip
+            ip6_address = str(int(h,16) + p)
+
+            if self._realm_data.default_gateway_ipv6 is not None:
+                ip6_gateway = self._realm_data.default_gateway_ipv6
+            else:
+                ip6_gateway = str(int(1) + p)
+
+            self._config_f.write('ifconfig-ipv6-push %s %s\n' % (ip6_address, ip6_gateway))
+
         if self._realm_data.vid is not None:
             self._config_f.write('vlan-pvid %d\n' % self._realm_data.vid)
 
@@ -495,19 +514,31 @@ class OvpnCmdConn(CommandConnection):
         else:
             self._log.debug('DHCP request provided no gateway information: %s'\
                     % (repr(res)))
-        if self._realm_data.provide_default_route and ('gateway' in res or \
-                self._realm_data.default_gateway_ipv4 is not None):
-            self._config_f.write('push "redirect-gateway def1"\n')
 
-        static_routes_ipv4 = []
-        if self._realm_data.static_routes_ipv4 is not None:
-            static_routes_ipv4 += self._realm_data.static_routes_ipv4
-        if 'static_routes' in res:
-            static_routes_ipv4 += res['static_routes']
-        if len(static_routes_ipv4) > 0:
-            for network, netmask, gateway in static_routes_ipv4:
-                self._config_f.write('push "route %s %s %s"\n' % (network,
-                        netmask, gateway))
+        if self._realm_data.provide_default_route:
+            if self._realm_data.default_gateway_ipv6:
+                self._config_f.write('push "redirect-gateway def1 ipv6"\n')
+            elif 'gateway' in res or self._realm_data.default_gateway_ipv4 is not None:
+                self._config_f.write('push "redirect-gateway def1"\n')
+        else:
+            static_routes_ipv4 = []
+            if self._realm_data.static_routes_ipv4 is not None:
+                static_routes_ipv4 += self._realm_data.static_routes_ipv4
+            if 'static_routes' in res:
+                static_routes_ipv4 += res['static_routes']
+            if len(static_routes_ipv4) > 0:
+                for network, netmask, gateway in static_routes_ipv4:
+                    self._config_f.write('push "route %s %s %s"\n' % (network,
+                            netmask, gateway))
+
+            static_routes_ipv6 = []
+            if self._realm_data.static_routes_ipv6 is not None:
+                static_routes_ipv6 += self._realm_data.static_routes_ipv6
+            if len(static_routes_ipv6) > 0:
+                for network, gateway in static_routes_ipv6:
+                    self._config_f.write('push "route-ipv6 %s %s"\n' % (network, gateway))
+
+            self._config_f.write('push "redirect-private"\n')
 
         for dns_ip in res['dns']:
             self._config_f.write('push "dhcp-option DNS %s"\n' % dns_ip)
@@ -754,6 +785,21 @@ def parse_static_routes_ipv4(data):
     return static_routes
 
 
+def parse_static_routes_ipv6(data):
+    """Parses a string of the form
+      ::/0 via fd00::1, fd01:1234::/64 via fd00::1
+    @return: Returns a list of prefix and gateway tuples.
+    """
+    static_routes = []
+    for static_route_str in split_cfg_list(data):
+        network, via, gateway = split_cfg_list(static_route_str, split=' ')
+        if via != 'via':
+            raise RuntimeError('Invalid static route format: "%s' % \
+                    static_route_str)
+        static_routes.append((network, gateway))
+    return static_routes
+
+
 class RealmData(object):
     """A RealmData object contains all data relevant for a specific realm.
     The attributes are injected at configuration-load-time.
@@ -767,7 +813,10 @@ class RealmData(object):
             self.dhcp_listening_ip = parent.dhcp_listening_ip
             self.provide_default_route = parent.provide_default_route
             self.default_gateway_ipv4 = parent.default_gateway_ipv4
+            self.subnet_ipv6 = parent.subnet_ipv6
+            self.default_gateway_ipv6 = parent.default_gateway_ipv6
             self.static_routes_ipv4 = parent.static_routes_ipv4
+            self.static_routes_ipv6 = parent.static_routes_ipv6
             self.dhcp_server_ips = parent.dhcp_server_ips
             self.expected_dhcp_lease_time = parent.expected_dhcp_lease_time
         else:
@@ -777,7 +826,10 @@ class RealmData(object):
             self.dhcp_listening_ip = None
             self.provide_default_route = True
             self.default_gateway_ipv4 = None
+            self.subnet_ipv6 = None
+            self.default_gateway_ipv6 = None
             self.static_routes_ipv4 = None
+            self.static_routes_ipv6 = None
             self.dhcp_server_ips = None
             self.expected_dhcp_lease_time = None
 
@@ -822,9 +874,19 @@ def process_realm(cfg, realm_name, realms, delayed_realms):
     realm_data.default_gateway_ipv4 = cfg_get_def(cfg, sect, 'default_gateway_ipv4',
             realm_data.default_gateway_ipv4)
 
+    realm_data.subnet_ipv6 = cfg_get_def(cfg, sect, 'subnet_ipv6',
+            realm_data.subnet_ipv6)
+
+    realm_data.default_gateway_ipv6 = cfg_get_def(cfg, sect, 'default_gateway_ipv6',
+            realm_data.default_gateway_ipv6)
+
     if cfg.has_option(sect, 'static_routes_ipv4'):
         realm_data.static_routes_ipv4 = parse_static_routes_ipv4(cfg.get(sect,
                 'static_routes_ipv4'))
+
+    if cfg.has_option(sect, 'static_routes_ipv6'):
+        realm_data.static_routes_ipv6 = parse_static_routes_ipv6(cfg.get(sect,
+                'static_routes_ipv6'))
 
     if realm_data.dhcp_listening_device is not None and \
             realm_data.dhcp_listening_ip is None:
