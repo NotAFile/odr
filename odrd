@@ -517,7 +517,8 @@ class OvpnCmdConn(CommandConnection):
 
         if self._realm_data.provide_default_route:
             if self._realm_data.default_gateway_ipv6:
-                self._config_f.write('push "redirect-gateway def1 ipv6"\n')
+                self._config_f.write('push "route-ipv6 2000::/3"\n')
+                self._config_f.write('push "redirect-gateway def1"\n')
             elif 'gateway' in res or self._realm_data.default_gateway_ipv4 is not None:
                 self._config_f.write('push "redirect-gateway def1"\n')
         else:
@@ -538,7 +539,7 @@ class OvpnCmdConn(CommandConnection):
                 for network, gateway in static_routes_ipv6:
                     self._config_f.write('push "route-ipv6 %s %s"\n' % (network, gateway))
 
-            self._config_f.write('push "redirect-private"\n')
+        self._config_f.write('push "redirect-private"\n')
 
         for dns_ip in res['dns']:
             self._config_f.write('push "dhcp-option DNS %s"\n' % dns_ip)
