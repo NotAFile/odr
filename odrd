@@ -498,7 +498,7 @@ class OvpnCmdConn(CommandConnection):
             if self._realm_data.default_gateway_ipv6 is not None:
                 ip6_gateway = self._realm_data.default_gateway_ipv6
             else:
-                ip6_gateway = str(int(1) + p)
+                ip6_gateway = str(1 + p)
 
             self._config_f.write('ifconfig-ipv6-push %s %s\n' % (ip6_address, ip6_gateway))
 
