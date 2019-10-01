@@ -533,7 +533,7 @@ class OvpnCmdConn(CommandConnection):
                             netmask, gateway))
 
             static_routes_ipv6 = []
-            if self._realm_data.static_routes_ipv6 is not None:
+            if self._realm_data.subnet_ipv6 is not None and self._realm_data.static_routes_ipv6 is not None:
                 static_routes_ipv6 += self._realm_data.static_routes_ipv6
             if len(static_routes_ipv6) > 0:
                 for network, gateway in static_routes_ipv6:
