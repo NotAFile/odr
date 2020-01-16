@@ -51,7 +51,7 @@ class ListeningSocket(object):
         self._socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         if self.listen_device is not None:
             self._socket.setsockopt(socket.SOL_SOCKET, SO_BINDTODEVICE,
-                    self.listen_device + '\0')
+                    self.listen_device.encode("utf-8") + b'\0')
 
         try :
             self._socket.bind((self.listen_address, self.listen_port))

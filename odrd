@@ -31,7 +31,7 @@ import prctl
 import socket
 import random
 from optparse import OptionParser
-from ConfigParser import SafeConfigParser
+from configparser import SafeConfigParser
 from functools import partial
 import datetime
 import hashlib

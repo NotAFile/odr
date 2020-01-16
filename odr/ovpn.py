@@ -37,7 +37,7 @@ def write_deferred_ret_file(fp, val):
     @param val: One of the CC_RET_* constants.
     """
     fp.seek(0)
-    fp.write('%d' % val)
+    fp.write(str(val))
     fp.flush()
     os.fsync(fp.fileno())
 
@@ -181,7 +181,7 @@ class OvpnServer(object):
 
     def _send_cmd(self, cmd):
         try:
-            self._socket.send(cmd.replace('\n', '\\n') + '\n')
+            self._socket.send(cmd.replace(b'\n', b'\\n') + b'\n')
         except socket.error as e:
             if e.args[0] == errno.EPIPE:
                 self.log.error('socket for OpenVPN server "%s" was ' \
@@ -251,11 +251,11 @@ class _OvpnListClientsState(object):
         self._list_done = list_done_clb
 
         self._clients = []
-        self._ovpn._send_cmd('status 2')
+        self._ovpn._send_cmd(b'status 2')
 
     def _parse_client_line(self, line):
         cl = OvpnClientConnData(server=self._ovpn)
-        d = line.split(',')
+        d = line.decode("utf-8").split(',')
         cl.common_name = d[1]
         if d[3] != '':
             cl.virtual_address = d[3]
@@ -264,7 +264,7 @@ class _OvpnListClientsState(object):
         self._clients.append(cl)
 
     def handle_line(self, line):
-        if line.startswith('CLIENT_LIST,'):
+        if line.startswith(b'CLIENT_LIST,'):
             self._parse_client_line(line)
         elif line == 'END\n':
             self._list_done(self._clients)
@@ -278,7 +278,7 @@ class _OvpnDisconnectClientsState(object):
 
     def __init__(self, ovpn, common_name, done_clb):
         self._done = done_clb
-        ovpn._send_cmd('kill %s' % common_name)
+        ovpn._send_cmd(b'kill %s' % common_name)
 
     def handle_line(self, line):
         if line.startswith('SUCCESS:'):

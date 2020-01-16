@@ -27,7 +27,7 @@ class LineSocket(object):
         """@param socket: The socket that is used to receive the line data from
         """
         self._socket = socket
-        self._in_buf = ''
+        self._in_buf = b''
 
     def __del__(self):
         self.close()
@@ -47,15 +47,15 @@ class LineSocket(object):
             lines.
         """
         new_data = self._socket.recv(1024)
-        self._in_buf += new_data.replace('\r\n', '\n')
-        lines = self._in_buf.split('\n')
+        self._in_buf += new_data.replace(b'\r\n', b'\n')
+        lines = self._in_buf.split(b'\n')
         # Add back new-line character to all but the last lines.
         for l in range(len(lines) - 1):
-            lines[l] = lines[l] + '\n'
-        if new_data == '':
+            lines[l] = lines[l] + b'\n'
+        if new_data == b'':
             # Received EOF.  Return any incomplete lines.
-            self._in_buf = ''
-            if len(lines) == 1 and lines[0] == '':
+            self._in_buf = b''
+            if len(lines) == 1 and lines[0] == b'':
                 return None
         else:
             # Store incomplete line-fragment.

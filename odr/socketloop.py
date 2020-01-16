@@ -106,7 +106,7 @@ class SocketLoop(object):
     def sockets(self):
         """@return: Returns the list of sockets that we have handlers for.
         """
-        return self._socket_handlers.keys()
+        return list(self._socket_handlers.keys())
 
     def quit(self):
         """Request that the select loop be exited soon.  Sets a flag that will
