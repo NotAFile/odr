@@ -23,37 +23,11 @@ import socket
 import os
 from odr.socketcompat import SO_PEERCRED
 import struct
+import json
 import fdsend
 
-
-def unpack_cmd(cmd_line):
-    """Parse the command line and return the parsed data or None.
-    :ivar cmd_line: Single-line command.
-    :returns: a tuple of command name and parameter dictionary.
-    """
-    try:
-        params = {}
-        l = cmd_line.split('\0')
-        cmd = l.pop(0)
-        for p in l:
-            k, v = p.split('=')
-            params[k] = v
-    except:
-        return None, {}
-    return (cmd, params)
 
-def pack_cmd(cmd, params):
-    """Packs a command name and a dictionary of parameters into a command line.
-    :ivar cmd: The command name.
-    :ivar params: A dictionary of parameters.
-    :returns: the command line.
-    """
-    for e in [cmd] + params.keys() + params.values():
-        if ('\n' in e) or ('\0' in e):
-            raise ValueError('attempted to pack invalid command or parameters')
-    return '\0'.join([cmd] + ['%s=%s' % i for i in params.iteritems()])
-
-class CommandConnection(object):
+class CommandConnection:
     """Represents the connection to a single client.  The class should be used
     as a base-class.  Sub-classes will implement the stub methods to provide the
     actual functionality.
@@ -91,11 +65,12 @@ class CommandConnection(object):
         :ivar cmd_line: The command line string to parse.
         """
         self._log.debug('parsing command "%s"' % repr(cmd_line))
-        cmd, params = unpack_cmd(cmd_line)
-        if cmd is None:
+        try:
+            data = json.loads(cmd_line.decode("utf-8"))
+        except json.JSONDecodeError:
             self._log.warning('failed to parse command "%s"' % repr(cmd_line))
             return
-        self.handle_cmd(cmd, params, files)
+        self.handle_cmd(data["cmd"], data, files)
 
     def handle_socket(self):
         """Part of the interface expected by the socket loop.  Should be called
@@ -111,9 +86,9 @@ class CommandConnection(object):
 
         # By wrapping the files in objects, they will be implicitly closed
         # (assuming a reference counted Python).
-        files = [os.fdopen(fd, 'wb') for fd in fds]
+        files = [os.fdopen(fd, 'w') for fd in fds]
 
-        if cmd_line != '':
+        if cmd_line != b'':
             self._parse_command(cmd_line, files=files)
         else:
             self._log.debug('closing cmd socket due to EOF')
@@ -129,7 +104,9 @@ class CommandConnection(object):
                 zero character.  (Optional.)
         :ivar files: File handles to send.  (Optional.)
         """
-        fdsend.sendfds(self._socket, pack_cmd(cmd, params), fds=files)
+        result = {"cmd": cmd, **params}
+        fdsend.sendfds(self._socket,
+                       json.dumps(result).encode("utf-8"), fds=files)
 
     def handle_command(self,  cmd):
         """The handle_command function is called as soon as a command was
