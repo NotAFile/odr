@@ -25,7 +25,6 @@ from odr.listeningsocket import ListeningSocket
 
 from pydhcplib.dhcp_packet import DhcpPacket
 from pydhcplib.type_ipv4 import ipv4
-from pydhcplib.type_strlist import strlist
 
 
 class DhcpAddressRequest(object):
@@ -80,7 +79,7 @@ class DhcpAddressRequest(object):
         self._success_handler = kwargs["success_handler_clb"]
         self._failure_handler = kwargs["failure_handler_clb"]
         self._local_ip = ipv4(kwargs["local_ip"])
-        self._client_identifier = strlist(kwargs["client_identifier"])
+        self._client_identifier = kwargs["client_identifier"].encode("utf-8")
         self._server_ips = [ipv4(ip) for ip in kwargs["server_ips"]]
         self._max_retries = kwargs.get("max_retries", 3)
         self._initial_timeout = kwargs.get("timeout", 4)
@@ -236,7 +235,10 @@ class DhcpAddressRequest(object):
         self._timeout_mgr.del_timeout_object(self)
         self._requestor.del_request(self)
         result = {}
-        result['domain'] = strlist(packet.GetOption('domain_name')).str()
+        domain_strlist = packet.GetOption('domain_name')
+        print(domain_strlist)
+        assert False
+        result['domain'] = None
 
         translate_ips = {
                 'yiaddr':'ip_address',

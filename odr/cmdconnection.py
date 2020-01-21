@@ -104,7 +104,8 @@ class CommandConnection:
                 zero character.  (Optional.)
         :ivar files: File handles to send.  (Optional.)
         """
-        result = {"cmd": cmd, **params}
+        result = {"cmd": cmd}
+        result.update(params)
         fdsend.sendfds(self._socket,
                        json.dumps(result).encode("utf-8"), fds=files)
 

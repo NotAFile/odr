@@ -131,7 +131,7 @@ class OvpnServer(object):
         self._cmd_state.clear()
 
     def _on_connected(self, hello_msg):
-        if not hello_msg.startswith('>INFO:'):
+        if not hello_msg.decode().startswith('>INFO:'):
             self.log.error('connection to OpenVPN server "%s" failed: "%s"' % (
                     self.name, hello_msg))
             self.close_mgmt()
@@ -264,7 +264,7 @@ class _OvpnListClientsState(object):
         self._clients.append(cl)
 
     def handle_line(self, line):
-        if line.startswith(b'CLIENT_LIST,'):
+        if line.decode().startswith(b'CLIENT_LIST,'):
             self._parse_client_line(line)
         elif line == 'END\n':
             self._list_done(self._clients)
