@@ -120,7 +120,7 @@ class DhcpAddressRequest(object):
         packet.SetOption("giaddr", self._local_ip.list())
 
         # Request IP address, etc. for the following client identifier.
-        packet.SetOption("client_identifier", self._client_identifier.list())
+        packet.SetOption("client_identifier", self._client_identifier)
 
         # We pretend to be a gateway, so the packet hop count is > 0 here.
         packet.AddLine("hops: 1")
