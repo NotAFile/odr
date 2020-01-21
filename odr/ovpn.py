@@ -37,7 +37,7 @@ def write_deferred_ret_file(fp, val):
     @param val: One of the CC_RET_* constants.
     """
     fp.seek(0)
-    fp.write(str(val))
+    fp.write(str(val).encode("ascii"))
     fp.flush()
     os.fsync(fp.fileno())
 
