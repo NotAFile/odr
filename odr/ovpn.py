@@ -264,7 +264,7 @@ class _OvpnListClientsState(object):
         self._clients.append(cl)
 
     def handle_line(self, line):
-        if line.decode().startswith(b'CLIENT_LIST,'):
+        if line.decode().startswith('CLIENT_LIST,'):
             self._parse_client_line(line)
         elif line == 'END\n':
             self._list_done(self._clients)
