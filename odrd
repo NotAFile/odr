@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 # vim:set fileencoding=utf-8 ft=python ts=8 sw=4 sts=4 et cindent:
 
 # odrd -- OpenVPN DHCP Requestor daemon
@@ -35,7 +35,7 @@ from configparser import SafeConfigParser
 from functools import partial
 import datetime
 import hashlib
-from netaddr import IPNetwork
+from ipaddress import IPv6Network
 
 import odr.ovpn as ovpn
 from odr.cmdconnection import CommandConnection, CommandConnectionListener
@@ -488,17 +488,18 @@ class OvpnCmdConn(CommandConnection):
 
         if self._realm_data.subnet_ipv6 is not None:
             prefix = self._realm_data.subnet_ipv6
+
             today = str(datetime.date.today())
-            m = hashlib.sha1()
-            m.update((self._full_username + today + self._secret).encode('utf-8'))
-            h = m.hexdigest()[:16]
-            p = IPNetwork(prefix).ip
-            ip6_address = str(int(h,16) + p)
+            hasher = hashlib.sha256()
+            hasher.update((self._full_username + today + self._secret).encode('utf-8'))
+            hash_hex = hasher.hexdigest()[:16]
+            network = IPv6Network(prefix).network_address
+            ip6_address = str(network + int(hash_hex, 16))
 
             if self._realm_data.default_gateway_ipv6 is not None:
                 ip6_gateway = self._realm_data.default_gateway_ipv6
             else:
-                ip6_gateway = str(int(1) + p)
+                ip6_gateway = str(network + 1)
 
             self._config_f.write('ifconfig-ipv6-push %s %s\n' % (ip6_address, ip6_gateway))
 
