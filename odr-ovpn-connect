@@ -32,8 +32,8 @@ def main():
     # Gather configuration
     #
 
-    cfg_f = open(os.environ['client_connect_config_file'], 'wb')
-    ret_f = open(os.environ['client_connect_deferred_file'], 'wb')
+    cfg_f = open(os.environ['client_connect_config_file'], 'w')
+    ret_f = open(os.environ['client_connect_deferred_file'], 'w')
     full_username = os.environ['username']
     daemon_name = ovpn.determine_daemon_name(script_name=SCRIPT_NAME)
 
@@ -58,7 +58,9 @@ def main():
                        fds=[ret_f, cfg_f])
 
         ret, _ = fdsend.recvfds(s, 1024, numfds=0)
-        if ret != 'OK':
+
+        status = json.loads(ret.decode("utf-8"))["cmd"]
+        if status != 'OK':
             raise RuntimeError('starting dhcp request failed (ret: "%s")' % ret)
     except:
         ovpn.write_deferred_ret_file(ret_f, ovpn.CC_RET_FAILED)

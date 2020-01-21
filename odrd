@@ -31,7 +31,7 @@ import prctl
 import socket
 import random
 from optparse import OptionParser
-from configparser import SafeConfigParser
+from configparser import ConfigParser
 from functools import partial
 import datetime
 import hashlib
@@ -324,7 +324,7 @@ class OvpnClientManager(object):
                 self._create_detected_client(client_data.common_name, server,
                         client_data.virtual_address)
 
-        for client in self._clients_by_server[server].values():
+        for client in list(self._clients_by_server[server].values()):
             if client.full_username not in client_data_by_username:
                 # The client has been disconnected.
                 if not client.iszombie:
@@ -1043,7 +1043,7 @@ def main():
     if len(args) != 0:
         parser.error("incorrect number of arguments")
 
-    cfg = SafeConfigParser()
+    cfg = ConfigParser()
     cfg.read(options.config_file)
 
     loglevel = logging.INFO

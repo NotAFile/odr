@@ -37,7 +37,7 @@ def write_deferred_ret_file(fp, val):
     @param val: One of the CC_RET_* constants.
     """
     fp.seek(0)
-    fp.write(str(val).encode("ascii"))
+    fp.write(str(val))
     fp.flush()
     os.fsync(fp.fileno())
 
@@ -266,7 +266,7 @@ class _OvpnListClientsState(object):
     def handle_line(self, line):
         if line.decode().startswith('CLIENT_LIST,'):
             self._parse_client_line(line)
-        elif line == 'END\n':
+        elif line == b'END\n':
             self._list_done(self._clients)
             return False
         return True
