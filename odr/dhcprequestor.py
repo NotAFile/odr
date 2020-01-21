@@ -235,10 +235,7 @@ class DhcpAddressRequest(object):
         self._timeout_mgr.del_timeout_object(self)
         self._requestor.del_request(self)
         result = {}
-        domain_strlist = packet.GetOption('domain_name')
-        print(domain_strlist)
-        assert False
-        result['domain'] = None
+        result['domain'] = packet.GetOption('domain_name')
 
         translate_ips = {
                 'yiaddr':'ip_address',
