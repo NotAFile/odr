@@ -47,22 +47,22 @@ def main():
     if daemon_name is not None:
         params['daemon_name'] = daemon_name
 
-    s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-    s.connect(CMD_SOCKET)
+    sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    sock.connect(CMD_SOCKET)
 
     ovpn.write_deferred_ret_file(ret_f, ovpn.CC_RET_DEFERRED)
     try:
         result = {"cmd": "request"}
         result.update(params)
-        fdsend.sendfds(s, json.dumps(result).encode("utf-8"),
+        fdsend.sendfds(sock, json.dumps(result).encode("utf-8"),
                        fds=[ret_f, cfg_f])
 
-        ret, _ = fdsend.recvfds(s, 1024, numfds=0)
+        ret, _ = fdsend.recvfds(sock, 1024, numfds=0)
 
         status = json.loads(ret.decode("utf-8"))["cmd"]
         if status != 'OK':
             raise RuntimeError('starting dhcp request failed (ret: "%s")' % ret)
-    except:
+    except Exception:
         ovpn.write_deferred_ret_file(ret_f, ovpn.CC_RET_FAILED)
         raise
 
