@@ -18,7 +18,6 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 import errno
-from odr.socketcompat import SO_BINDTODEVICE
 import socket
 
 
@@ -50,7 +49,7 @@ class ListeningSocket(object):
         self._socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self._socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         if self.listen_device is not None:
-            self._socket.setsockopt(socket.SOL_SOCKET, SO_BINDTODEVICE,
+            self._socket.setsockopt(socket.SOL_SOCKET, socket.SO_BINDTODEVICE,
                     self.listen_device.encode("utf-8") + b'\0')
 
         try :
