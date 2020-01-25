@@ -26,7 +26,7 @@ from ipaddress import IPv4Address
 
 from odr.route import network_mask
 from odr.listeningsocket import ListeningSocket
-from odr.timeoutmgr import TimeoutManager
+from odr.timeoutmgr import TimeoutManager, TimeoutObject
 
 from pydhcplib.dhcp_packet import DhcpPacket
 
@@ -51,7 +51,7 @@ class DhcpAddressRequest(object):
 
     def __init__(
         self, *, log: logging.Logger, requestor: "DhcpAddressRequestor",
-        timeout_mgr: TimeoutManager, success_handler_clb: Callable[[DhcpPacket], None],
+        timeout_mgr: TimeoutManager, success_handler_clb: Callable[[Dict], None],
         failure_handler_clb: Callable[[], None], local_ip: str, client_identifier: str,
         server_ips: Iterable[str], max_retries: int = 3, timeout: int = 4, lease_time: int = None
     ) -> None:
@@ -105,7 +105,7 @@ class DhcpAddressRequest(object):
         # event.)
         self._timeout = self._initial_timeout
         # When will the packet time out?
-        self._timeout_time = None  # type: Optional[float]
+        self._timeout_obj = None  # type: Optional[TimeoutObject]
         # What was the contents of the last packet?  (Used for retry.)
         self._last_packet = None  # type: Optional[DhcpPacket]
         # Number of packet retries
@@ -187,8 +187,9 @@ class DhcpAddressRequest(object):
         """
         randomised_timeout = self._timeout + random.uniform(-1, 1)
         self._log.debug('timeout for xid %d is %ds', self.xid, randomised_timeout)
-        self._timeout_time = time.time() + randomised_timeout
-        self._timeout_mgr.add_timeout_object(self)
+        timeout_time = time.time() + randomised_timeout
+        self._timeout_obj = TimeoutObject(timeout_time, self.handle_timeout)
+        self._timeout_mgr.add_timeout_object(self._timeout_obj)
         for server_ip in self._server_ips:
             self._log.debug("Sending packet in state %s to %s [%d/%d]",
                     self._state, server_ip, self._packet_retries + 1,
@@ -196,7 +197,9 @@ class DhcpAddressRequest(object):
             self._requestor.send_packet(packet, str(server_ip), 67)
 
     def _valid_source_address(self, packet: DhcpPacket) -> bool:
-        ip_address_str, port = packet.source_address
+        if not packet.source_address:
+            return False
+        ip_address_str, port = packet.source_address  # type: (str, int)
         ip_address = IPv4Address(ip_address_str)
         if port != 67:
             self._log.debug("dropping packet from wrong port: %s:%d",
@@ -220,7 +223,8 @@ class DhcpAddressRequest(object):
         self._log.debug("Received offer")
         if not self._valid_source_address(offer_packet):
             return
-        self._timeout_mgr.del_timeout_object(self)
+        if self._timeout_obj:
+            self._timeout_mgr.del_timeout_object(self._timeout_obj)
         req_packet = self._generate_request(offer_packet)
         self._retrieve_server_ip(req_packet)
         self._state = self.AR_REQUEST
@@ -241,7 +245,8 @@ class DhcpAddressRequest(object):
         self._log.debug("Received ACK")
         if not self._valid_source_address(packet):
             return
-        self._timeout_mgr.del_timeout_object(self)
+        if self._timeout_obj:
+            self._timeout_mgr.del_timeout_object(self._timeout_obj)
         self._requestor.del_request(self)
         result = {}  # type: Dict[str, Any]
         result['domain'] = packet.GetOption('domain_name').decode("ascii")
@@ -267,7 +272,7 @@ class DhcpAddressRequest(object):
 
         if packet.IsOption('classless_static_route'):
             static_routes = parse_classless_static_routes(
-                    packet.GetOption('classless_static_route'))
+                    list(packet.GetOption('classless_static_route')))
             if static_routes is not None:
                 if 'gateway' in result:
                     # We MUST ignore a regular default route if static routes
@@ -315,17 +320,10 @@ class DhcpAddressRequest(object):
         self._log.debug("Received NACK")
         if not self._valid_source_address(packet):
             return
-        self._timeout_mgr.del_timeout_object(self)
+        if self._timeout_obj:
+            self._timeout_mgr.del_timeout_object(self._timeout_obj)
         self._requestor.del_request(self)
         self._failure_handler()
-
-    @property
-    def timeout_time(self) -> Optional[float]:
-        """
-        :returns: Point in time (in seconds since the UNIX epoch) of the
-                  timeout of the last packet that was sent.
-        """
-        return self._timeout_time
 
     def handle_timeout(self) -> None:
         """Called in case the timeout_time has passed without a proper DHCP
@@ -339,7 +337,7 @@ class DhcpAddressRequest(object):
         self._log.debug("handling timeout for %d" % self.xid)
         if self._packet_retries >= self._max_retries:
             self._requestor.del_request(self)
-            self._log.debug("Timeout for reply to packet in state %d" % \
+            self._log.debug("Timeout for reply to packet in state %s" % \
                     self._state)
             self._failure_handler()
         elif self._last_packet is not None:
