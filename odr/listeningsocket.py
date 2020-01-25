@@ -20,6 +20,9 @@
 import errno
 import socket
 
+# reimport to prevent shadowing
+from socket import socket as SocketType
+
 
 class SocketLocalAddressBindFailed(Exception):
     """For some reason, the requested local address / port combination could not
@@ -37,7 +40,7 @@ class ListeningSocket(object):
     desired.
     """
 
-    def __init__(self, listen_address, listen_port, listen_device=None):
+    def __init__(self, listen_address: str, listen_port: int, listen_device: str = None) -> None:
         """\
         @param listen_address: IP address as string to listen on.
         @param listen_port: Local DHCP listening port. Defaults to 67.
@@ -66,7 +69,7 @@ class ListeningSocket(object):
                         self.listen_device, msg)
 
     @property
-    def socket(self):
+    def socket(self) -> SocketType:
         """@return: Returns the listening socket.
         """
         return self._socket

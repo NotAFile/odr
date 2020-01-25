@@ -19,16 +19,17 @@
 
 import time
 
+from typing import Callable, List
 
 class TimeoutObject(object):
-    def __init__(self, timeout_time, timeout_func):
+    def __init__(self, timeout_time: float, timeout_func: Callable[[], None]) -> None:
         self.timeout_time = timeout_time
         self._timeout_func = timeout_func
 
-    def handle_timeout(self):
+    def handle_timeout(self) -> None:
         self._timeout_func()
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return "<%s wrapping %s>" % (self.__class__, repr(self._timeout_func))
 
 
@@ -39,10 +40,10 @@ class TimeoutManager(object):
     Objects that have timed out are removed from the timeout managers list of
     objects.
     """
-    def __init__(self):
-        self._timeout_objects = []
+    def __init__(self) -> None:
+        self._timeout_objects = []  # type: List[TimeoutObject]
 
-    def add_rel_timeout(self, timeout_secs, timeout_func):
+    def add_rel_timeout(self, timeout_secs: float, timeout_func: Callable[[], None]) -> TimeoutObject:
         """Adds a timeout event for a time in the near future, measured in
         seconds from the current point of time.  On timeout, the function
         timeout_func is called.
@@ -55,7 +56,7 @@ class TimeoutManager(object):
         """
         return self.add_abs_timeout(time.time() + timeout_secs, timeout_func)
 
-    def add_abs_timeout(self, timeout_time, timeout_func):
+    def add_abs_timeout(self, timeout_time: float, timeout_func: Callable[[], None]) -> TimeoutObject:
         """Adds a timeout event for a specific time.  On timeout, the function
         timeout_func is called.
 
@@ -69,7 +70,7 @@ class TimeoutManager(object):
         self.add_timeout_object(obj)
         return obj
 
-    def add_timeout_object(self, timeout_object):
+    def add_timeout_object(self, timeout_object: TimeoutObject) -> None:
         """Adds a timeout object.  The timeout object must provide the timeout
         time as attribute "timeout_time" and an event handler method
         "handle_timeout".
@@ -78,7 +79,7 @@ class TimeoutManager(object):
         """
         self._timeout_objects.append(timeout_object)
 
-    def del_timeout_object(self, timeout_object):
+    def del_timeout_object(self, timeout_object: TimeoutObject) -> None:
         """Removes a timeout object.  The method may be used if an object should
         be removed before it times out.
 
@@ -86,7 +87,7 @@ class TimeoutManager(object):
         """
         self._timeout_objects.remove(timeout_object)
 
-    def check_timeouts(self):
+    def check_timeouts(self) -> None:
         """This method should be periodically called to check whether any
         timeouts have occured in the mean-time.
 
@@ -102,5 +103,5 @@ class TimeoutManager(object):
             else:
                 timeout_object.handle_timeout()
 
-    def __call__(self):
+    def __call__(self) -> None:
         self.check_timeouts()

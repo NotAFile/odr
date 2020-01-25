@@ -20,11 +20,15 @@
 import random
 import time
 import logging
+
+from typing import Dict, Optional, Tuple, List, Callable, Iterable, Any
+from ipaddress import IPv4Address
+
 from odr.route import network_mask
 from odr.listeningsocket import ListeningSocket
+from odr.timeoutmgr import TimeoutManager
 
 from pydhcplib.dhcp_packet import DhcpPacket
-from pydhcplib.type_ipv4 import ipv4
 
 
 class DhcpAddressRequest(object):
@@ -45,7 +49,12 @@ class DhcpAddressRequest(object):
     AR_DISCOVER = 1
     AR_REQUEST = 2
 
-    def __init__(self, **kwargs):
+    def __init__(
+        self, *, log: logging.Logger, requestor: "DhcpAddressRequestor",
+        timeout_mgr: TimeoutManager, success_handler_clb: Callable[[DhcpPacket], None],
+        failure_handler_clb: Callable[[], None], local_ip: str, client_identifier: str,
+        server_ips: Iterable[str], max_retries: int = 3, timeout: int = 4, lease_time: int = None
+    ) -> None:
         """Sets up the address request.
 
         Creates a new XID.  Each address request has such a unique (randomly
@@ -73,51 +82,51 @@ class DhcpAddressRequest(object):
         :ivar lease_time: DHCP lease time we would like to have. Defaults to
                 None, meaning no specific lease time is requested.
         """
-        self._log = kwargs["log"]
-        self._requestor = kwargs["requestor"]
-        self._timeout_mgr = kwargs["timeout_mgr"]
-        self._success_handler = kwargs["success_handler_clb"]
-        self._failure_handler = kwargs["failure_handler_clb"]
-        self._local_ip = ipv4(kwargs["local_ip"])
-        self._client_identifier = kwargs["client_identifier"].encode("utf-8")
-        self._server_ips = [ipv4(ip) for ip in kwargs["server_ips"]]
-        self._max_retries = kwargs.get("max_retries", 3)
-        self._initial_timeout = kwargs.get("timeout", 4)
-        self._lease_time = kwargs.get("lease_time", None)
+        self._log = log
+        self._requestor = requestor
+        self._timeout_mgr = timeout_mgr
+        self._success_handler = success_handler_clb
+        self._failure_handler = failure_handler_clb
+        self._local_ip = IPv4Address(local_ip)
+        self._client_identifier = client_identifier.encode("utf-8")
+        self._server_ips = [IPv4Address(ip) for ip in server_ips]
+        self._max_retries = max_retries
+        self._initial_timeout = timeout
+        self._lease_time = lease_time
 
         self._start_time = int(time.time())
 
-        self._xid = ipv4([random.randint(0, 255) for i in range(4)])
+        self._xid = random.randint(0, (2**32) - 1)
 
         # Current packet state.
-        self._state = None
+        self._state = None  # type: Optional[int]
 
         # What's the current timeout?  (Will be increased after each timeout
         # event.)
-        self._timeout = None
+        self._timeout = self._initial_timeout
         # When will the packet time out?
-        self._timeout_time = None
+        self._timeout_time = None  # type: Optional[float]
         # What was the contents of the last packet?  (Used for retry.)
-        self._last_packet = None
+        self._last_packet = None  # type: Optional[DhcpPacket]
         # Number of packet retries
         self._packet_retries = 0
 
-    def __del__(self):
+    def __del__(self) -> None:
         self._log.debug('xid %d destroyed' % self.xid)
 
     @property
-    def xid(self):
+    def xid(self) -> int:
         """:returns: the unique identifier of the DHCP request.
         """
-        return self._xid.int()
+        return self._xid
 
-    def _generate_base_packet(self):
+    def _generate_base_packet(self) -> DhcpPacket:
         packet = DhcpPacket()
         packet.AddLine("op: BOOTREQUEST")
-        packet.SetOption("xid", self._xid.list())
+        packet.SetOption("xid", self._xid.to_bytes(4, "big"))
 
         # We're the gateway.
-        packet.SetOption("giaddr", self._local_ip.list())
+        packet.SetOption("giaddr", self._local_ip.packed)
 
         # Request IP address, etc. for the following client identifier.
         packet.SetOption("client_identifier", self._client_identifier)
@@ -127,19 +136,19 @@ class DhcpAddressRequest(object):
 
         return packet
 
-    def _add_option_list(self, packet):
+    def _add_option_list(self, packet: DhcpPacket) -> None:
         # 'classless_static_route' must be requested before 'router'.
         packet.AddLine("parameter_request_list: subnet_mask," \
                 "classless_static_route,router," \
                 "domain_name_server,domain_name,renewal_time_value," \
                 "rebinding_time_value")
 
-    def _set_lease_time(self, packet):
+    def _set_lease_time(self, packet: DhcpPacket) -> None:
         if self._lease_time is None:
             return
-        packet.SetOption('ip_address_lease_time', ipv4(self._lease_time).list())
+        packet.SetOption('ip_address_lease_time', self._lease_time.to_bytes(4, "big"))
 
-    def _retrieve_server_ip(self, packet):
+    def _retrieve_server_ip(self, packet: DhcpPacket) -> None:
         """In case we're sending the requests to more than one DHCP server,
         attempt to determine which DHCP server answered, so that we can restrict
         our future requests to only one server.
@@ -147,16 +156,16 @@ class DhcpAddressRequest(object):
         if len(self._server_ips) > 1:
             self._log.debug("Attempting to find server ip")
             try:
-                self._server_ips = [ipv4(packet.GetOption(
+                self._server_ips = [IPv4Address(packet.GetOption(
                         'server_identifier'))]
-            except:
-                pass
+            except Exception:
+                self._log.exception("invalid server ip response")
             else:
                 # We were able to determine a single DHCP server with which we
                 # will communicate from now on.
-                self._log.debug("Found server ip %s" % self._server_ips[0].str())
+                self._log.debug("Found server ip %s", self._server_ips[0])
 
-    def _send_packet(self, packet):
+    def _send_packet(self, packet: DhcpPacket) -> None:
         """Method to initially send a packet.
         """
         self._last_packet = packet
@@ -164,42 +173,42 @@ class DhcpAddressRequest(object):
         self._timeout = self._initial_timeout
         self._send_to_server(packet)
 
-    def _resend_packet(self):
+    def _resend_packet(self) -> None:
         """Method to re-send the packet that was sent last.
         """
+        assert self._last_packet is not None
         self._packet_retries += 1
         self._timeout *= 2
         self._send_to_server(self._last_packet)
 
-    def _send_to_server(self, packet):
+    def _send_to_server(self, packet: DhcpPacket) -> None:
         """Method that does the actual packet sending.  The packet is sent once
         for each DHCP server destination.
         """
         randomised_timeout = self._timeout + random.uniform(-1, 1)
-        self._log.debug('timeout for xid %d is %ds' % (self.xid,
-            randomised_timeout))
+        self._log.debug('timeout for xid %d is %ds', self.xid, randomised_timeout)
         self._timeout_time = time.time() + randomised_timeout
         self._timeout_mgr.add_timeout_object(self)
         for server_ip in self._server_ips:
-            self._log.debug("Sending packet in state %d to %s [%d/%d]" % (
-                    self._state, server_ip.str(), self._packet_retries + 1,
-                    self._max_retries + 1))
-            self._requestor.send_packet(packet, server_ip.str(), 67)
+            self._log.debug("Sending packet in state %s to %s [%d/%d]",
+                    self._state, server_ip, self._packet_retries + 1,
+                    self._max_retries + 1)
+            self._requestor.send_packet(packet, str(server_ip), 67)
 
-    def _valid_source_address(self, packet):
-        ip_address, port = packet.source_address
-        ip_address = ipv4(ip_address)
+    def _valid_source_address(self, packet: DhcpPacket) -> bool:
+        ip_address_str, port = packet.source_address
+        ip_address = IPv4Address(ip_address_str)
         if port != 67:
-            self._log.debug("dropping packet from wrong port: %s:%d" % \
-                    packet.source_address)
+            self._log.debug("dropping packet from wrong port: %s:%d",
+                    packet.source_address, port)
             return False
         if ip_address not in self._server_ips:
-            self._log.debug("dropping packet from wrong IP address: %s:%d" % \
-                    packet.source_address)
+            self._log.debug("dropping packet from wrong IP address: %s:%d",
+                    packet.source_address, port)
             return False
         return True
 
-    def handle_dhcp_offer(self, offer_packet):
+    def handle_dhcp_offer(self, offer_packet: DhcpPacket) -> None:
         """Called by the requestor as soon as a DHCP OFFER packet is received
         for our XID.
 
@@ -217,7 +226,7 @@ class DhcpAddressRequest(object):
         self._state = self.AR_REQUEST
         self._send_packet(req_packet)
 
-    def handle_dhcp_ack(self, packet):
+    def handle_dhcp_ack(self, packet: DhcpPacket) -> None:
         """Called by the requestor as soon as a DHCP ACK packet is received for
         our XID.
 
@@ -234,8 +243,8 @@ class DhcpAddressRequest(object):
             return
         self._timeout_mgr.del_timeout_object(self)
         self._requestor.del_request(self)
-        result = {}
-        result['domain'] = packet.GetOption('domain_name')
+        result = {}  # type: Dict[str, Any]
+        result['domain'] = packet.GetOption('domain_name').decode("ascii")
 
         translate_ips = {
                 'yiaddr':'ip_address',
@@ -247,13 +256,13 @@ class DhcpAddressRequest(object):
                 continue
             val = packet.GetOption(opt_name)
             if len(val) == 4:
-                result[translate_ips[opt_name]] = str(ipv4(val))
+                result[translate_ips[opt_name]] = str(IPv4Address(val))
 
-        dns = []
+        dns = []  # type: List[str]
         result['dns'] = dns
         dns_list = packet.GetOption('domain_name_server')
         while len(dns_list) >= 4:
-            dns.append(str(ipv4(dns_list[:4])))
+            dns.append(str(IPv4Address(dns_list[:4])))
             dns_list = dns_list[4:]
 
         if packet.IsOption('classless_static_route'):
@@ -276,22 +285,22 @@ class DhcpAddressRequest(object):
             del static_routes
 
         # Calculate lease timeouts (with RFC T1/T2 if not found in packet)
-        lease_delta = ipv4(packet.GetOption('ip_address_lease_time')).int()
+        lease_delta = int.from_bytes(packet.GetOption('ip_address_lease_time'), "big")
         result['lease_timeout'] = self._start_time + lease_delta
         if packet.IsOption('renewal_time_value'):
-            renewal_delta = ipv4(packet.GetOption('renewal_time_value')).int()
+            renewal_delta = int.from_bytes(packet.GetOption('renewal_time_value'), "big")
         else:
             renewal_delta = int(lease_delta * 0.5) + random.randint(-5, 5)
         result['renewal_timeout'] = self._start_time + renewal_delta
         if packet.IsOption('rebinding_time_value'):
-            rebinding_delta = ipv4(packet.GetOption('rebinding_time_value')).int()
+            rebinding_delta = int.from_bytes(packet.GetOption('rebinding_time_value'), "big")
         else:
             rebinding_delta = int(lease_delta * 0.875) + random.randint(-5, 5)
         result['rebinding_timeout'] = self._start_time + rebinding_delta
 
         self._success_handler(result)
 
-    def handle_dhcp_nack(self, packet):
+    def handle_dhcp_nack(self, packet: DhcpPacket) -> None:
         """Called by the requestor as soon as a DHCP NACK packet is received for
         our XID.
 
@@ -311,14 +320,14 @@ class DhcpAddressRequest(object):
         self._failure_handler()
 
     @property
-    def timeout_time(self):
+    def timeout_time(self) -> Optional[float]:
         """
         :returns: Point in time (in seconds since the UNIX epoch) of the
                   timeout of the last packet that was sent.
         """
         return self._timeout_time
 
-    def handle_timeout(self):
+    def handle_timeout(self) -> None:
         """Called in case the timeout_time has passed without a proper DHCP
         response.  Handles resend attempts up to a certain maximum number of
         retries.
@@ -336,7 +345,7 @@ class DhcpAddressRequest(object):
         elif self._last_packet is not None:
             self._resend_packet()
 
-    def _generate_request(self, offer_packet):
+    def _generate_request(self, offer_packet: DhcpPacket) -> DhcpPacket:
         """Generates a DHCP REQUEST packet.
         """
         raise NotImplementedError('Method _generate_request not implemented')
@@ -346,7 +355,7 @@ class DhcpAddressInitialRequest(DhcpAddressRequest):
     """
     """
 
-    def __init__(self, **kwargs):
+    def __init__(self, **kwargs) -> None:
         """Sets up the initial address request.
 
         See :meth:`DhcpAddressRequest.__init__` for further parameters.
@@ -360,7 +369,7 @@ class DhcpAddressInitialRequest(DhcpAddressRequest):
         self._requestor.add_request(self)
         self._send_packet(self._generate_discover())
 
-    def _generate_discover(self):
+    def _generate_discover(self) -> DhcpPacket:
         """Generates a DHCP DISCOVER packet.
         """
         packet = self._generate_base_packet()
@@ -369,7 +378,7 @@ class DhcpAddressInitialRequest(DhcpAddressRequest):
         self._set_lease_time(packet)
         return packet
 
-    def _generate_request(self, offer_packet):
+    def _generate_request(self, offer_packet: DhcpPacket) -> DhcpPacket:
         """Generates a DHCP REQUEST packet.
         """
         packet = self._generate_base_packet()
@@ -386,30 +395,29 @@ class DhcpAddressRefreshRequest(DhcpAddressRequest):
     """
     """
 
-    def __init__(self, **kwargs):
+    def __init__(self, client_ip: str, **kwargs) -> None:
         """Sets up the address request.
 
         See :meth:`DhcpAddressRequest.__init__` for further parameters.
         """
-        DhcpAddressRequest.__init__(self,
-                log=logging.getLogger('dhcpaddrrefreshreq'), **kwargs)
+        super().__init__(log=logging.getLogger('dhcpaddrrefreshreq'), **kwargs)
 
-        self._client_ip = ipv4(kwargs["client_ip"])
+        self._client_ip = IPv4Address(client_ip)
         self._log.debug('refresh request with xid %d created' % self.xid)
 
         self._state = self.AR_REQUEST
 
         self._requestor.add_request(self)
-        self._send_packet(self._generate_request())
+        self._send_packet(self._generate_refresh_request())
 
-    def _generate_request(self):
+    def _generate_refresh_request(self) -> DhcpPacket:
         """Generates a DHCP REQUEST packet.
         """
         packet = self._generate_base_packet()
         packet.AddLine("dhcp_message_type: DHCP_REQUEST")
         self._add_option_list(packet)
         self._set_lease_time(packet)
-        packet.SetOption("request_ip_address", self._client_ip.list())
+        packet.SetOption("request_ip_address", self._client_ip.packed)
         return packet
 
 
@@ -436,14 +444,14 @@ class DhcpAddressRequestor(ListeningSocket):
         6:'handle_dhcp_nack',
     }
 
-    def __init__(self, listen_address='', listen_port=67, listen_device=None):
+    def __init__(self, listen_address: str = '', listen_port: int = 67, listen_device: str = None) -> None:
         """\
         :ivar listen_address: IP address as string to listen on.
         :ivar listen_port: Local DHCP listening port. Defaults to 67.
         :ivar listen_device: Device name to bind to.
         """
         self._log = logging.getLogger('dhcpaddrrequestor')
-        self._requests = {}
+        self._requests = {}  # type: Dict[int, DhcpAddressRequest]
 
         super(DhcpAddressRequestor, self).__init__(listen_address,
                 listen_port, listen_device)
@@ -451,23 +459,23 @@ class DhcpAddressRequestor(ListeningSocket):
         self._log.debug('listening on %s:%d@%s for DHCP responses' % (
                 self.listen_address, self.listen_port, self.listen_device))
 
-    def add_request(self, request):
+    def add_request(self, request: DhcpAddressRequest) -> None:
         """Adds a new DHCP address request to this requestor.
 
         :ivar request: The request that should be added.
         """
-        self._log.debug("adding xid %d" % request.xid)
+        self._log.debug("adding xid %d", request.xid)
         self._requests[request.xid] = request
 
-    def del_request(self, request):
+    def del_request(self, request: DhcpAddressRequest) -> None:
         """Removes a DHCP address request that was previously added.
 
         :ivar request: The request that should be removed.
         """
-        self._log.debug("deleting xid %d" % request.xid)
+        self._log.debug("deleting xid %d", request.xid)
         del self._requests[request.xid]
 
-    def handle_socket(self):
+    def handle_socket(self) -> None:
         """Retrieves the next, waiting DHCP packet, parses it and calls the
         handler of the associated request.
         """
@@ -491,12 +499,12 @@ class DhcpAddressRequestor(ListeningSocket):
                         dhcp_type)
                 return
 
-            xid = ipv4(packet.GetOption('xid'))
-            if xid.int() not in self._requests:
-                self._log.debug("Ignoring answer with xid %s" % repr(xid.int()))
+            xid = int.from_bytes(packet.GetOption('xid'), "big")
+            if xid not in self._requests:
+                self._log.debug("Ignoring answer with xid %s" % repr(xid))
                 return
 
-            request = self._requests[xid.int()]
+            request = self._requests[xid]
             clb_name = self._DHCP_TYPE_HANDLERS[dhcp_type]
             if not hasattr(request, clb_name):
                 self._log.error("request has no callback '%s'" % clb_name)
@@ -507,7 +515,7 @@ class DhcpAddressRequestor(ListeningSocket):
         except:
             self._log.exception('handling DHCP packet failed')
 
-    def send_packet(self, packet, dest_ip, dest_port):
+    def send_packet(self, packet: DhcpPacket, dest_ip: str, dest_port: int) -> None:
         data = packet.EncodePacket()
         self.socket.sendto(data, (dest_ip, dest_port))
 
@@ -516,11 +524,11 @@ class DhcpAddressRequestorManager(object):
     """Holds a list of all available requestors.  Not much more than a
     dictionary with added error detection.
     """
-    def __init__(self):
-        self._requestors_by_device_and_ip = {}
+    def __init__(self) -> None:
+        self._requestors_by_device_and_ip = {}  # type: Dict[Tuple[Optional[str], str], DhcpAddressRequestor]
         self._log = logging.getLogger('dhcpaddrrequestormgr')
 
-    def add_requestor(self, requestor):
+    def add_requestor(self, requestor: DhcpAddressRequestor) -> None:
         """
         :ivar requestor: Instance of a requestor that should be added to
                 the list of known requestors.
@@ -532,12 +540,12 @@ class DhcpAddressRequestorManager(object):
             return
         self._requestors_by_device_and_ip[listen_pair] = requestor
 
-    def has_requestor(self, device, local_ip):
+    def has_requestor(self, device: str, local_ip: str) -> bool:
         """:returns: True if the device and local_ip already has a requestor.
         """
         return (device, local_ip) in self._requestors_by_device_and_ip
 
-    def get_requestor(self, device, local_ip):
+    def get_requestor(self, device: str, local_ip: str) -> Optional[DhcpAddressRequestor]:
         """
         :returns: the requestor matching the device and local_ip, or
                   None in case there is none.
@@ -550,7 +558,7 @@ class DhcpAddressRequestorManager(object):
         return self._requestors_by_device_and_ip[listen_pair]
 
 
-def parse_classless_static_routes(data):
+def parse_classless_static_routes(data: List[int]) -> Optional[List[Tuple[str, str, str]]]:
     """Parses an array of ints, representing classless static routes according
     to RFC 3442, into a list of tuples with full IP addresses.
 
@@ -561,7 +569,7 @@ def parse_classless_static_routes(data):
     while len(remaining) >= 5:
         mask_width = remaining.pop(0)
 
-        significant_octets = (mask_width - 1) / 8 + 1
+        significant_octets = (mask_width - 1) // 8 + 1
         if significant_octets > 4:
             # Invalid number of octets.
             return None
@@ -578,7 +586,7 @@ def parse_classless_static_routes(data):
         if len(gateway) != 4:
             # List too short, malformed gateway.
             return None
-        routes.append((ipv4(network).str(), mask, ipv4(gateway).str()))
+        routes.append((str(IPv4Address(network)), mask, str(IPv4Address(gateway))))
 
     if len(remaining) > 0:
         # Failed to properly parse the option.

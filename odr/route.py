@@ -17,17 +17,17 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-from pydhcplib.type_ipv4 import ipv4
+from ipaddress import IPv4Address
 
 
-def network_mask(mask_width):
+def network_mask(mask_width: int) -> str:
     """Build the network mask matching the specified network mask bit width.
 
     @return: Returns the network mask as list of integers.
     """
-    mask = [255] * max(mask_width / 8, 0)
+    mask = [255] * max(mask_width // 8, 0)
     if len(mask) < 4:
         mask += [255 - (2**(8 - (mask_width % 8)) - 1)]
     mask += [0] * (4 - len(mask))
-    return ipv4(mask).str()
+    return str(IPv4Address(mask))
 
