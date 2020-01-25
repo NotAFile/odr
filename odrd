@@ -203,7 +203,7 @@ class OvpnClient(object):
                     server_ips=self._realm_data.dhcp_server_ips,
                     client_ip=self._leased_ip_address,
                     lease_time=self._realm_data.expected_dhcp_lease_time)
-        except:
+        except Exception:
             self._log.exception('Adding a new DHCP refresh request failed')
             self.server.disconnect_client(self.full_username)
 
@@ -679,7 +679,7 @@ class OvpnCmdConn(CommandConnection):
                     local_port=realm_data.dhcp_local_port,
                     server_ips=realm_data.dhcp_server_ips,
                     lease_time=realm_data.expected_dhcp_lease_time)
-        except:
+        except Exception:
             self._log.exception('Adding a new DHCP request failed')
 
     def _handle_disconnect_cmd(self, cmd, params, files) -> None:
@@ -1157,7 +1157,7 @@ def main() -> None:
 
     try:
         sloop.run()
-    except:
+    except Exception:
         logging.exception('Caught exception in main loop, exiting.')
         sys.exit(1)
 

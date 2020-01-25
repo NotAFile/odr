@@ -510,7 +510,7 @@ class DhcpAddressRequestor(ListeningSocket):
 
             clb = getattr(request, clb_name)
             clb(packet)
-        except:
+        except Exception:
             self._log.exception('handling DHCP packet failed')
 
     def send_packet(self, packet: DhcpPacket, dest_ip: str, dest_port: int) -> None:

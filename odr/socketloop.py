@@ -19,7 +19,6 @@
 
 import select
 import logging
-import errno
 
 
 class SocketLoop(object):
@@ -42,7 +41,7 @@ class SocketLoop(object):
             socket_handler = self._socket_handlers[ready_input_socket]
             try:
                 socket_handler.handle_socket()
-            except:
+            except Exception:
                 self.log.exception('socket handler failed, removing')
                 self.del_socket_handler(socket_handler)
 
@@ -50,7 +49,7 @@ class SocketLoop(object):
         for idle_handler in self._idle_handlers[:]:
             try:
                 idle_handler()
-            except:
+            except Exception:
                 self.log.exception('idle handler failed, removing')
                 self.del_idle_handler(idle_handler)
 
@@ -64,11 +63,8 @@ class SocketLoop(object):
             try:
                 ready_input_sockets, _, _ = select.select(self.sockets, [], [],
                         self.timeout)
-            except select.error as ex:
-                if ex.args[0] == errno.EINTR:
-                    continue
-                else:
-                    raise
+            except InterruptedError:
+                continue
             self._handle_ready_input_sockets(ready_input_sockets)
             self._handle_idle_handlers()
 

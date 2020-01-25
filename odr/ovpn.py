@@ -17,19 +17,17 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
+import logging
 import os
 import socket
-import logging
-import errno
 import time
-from odr.queue import StateQueue
+from typing import Optional, TextIO
+
 from odr.linesocket import LineSocket
+from odr.queue import StateQueue
 from odr.socketloop import SocketLoop
 from odr.timeoutmgr import TimeoutManager
 
-from typing import Optional, TextIO
-
-
 CC_RET_FAILED = 0
 CC_RET_SUCCEEDED = 1
 CC_RET_DEFERRED = 2
@@ -116,9 +114,9 @@ class OvpnServer(object):
         sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
         try:
             sock.connect(self._socket_fn)
-        except socket.error as e:
-            self.log.error('connection to OpenVPN server "%s" failed: %s' % (
-                    self.name, e))
+        except ConnectionError as e:
+            self.log.error('connection to OpenVPN server "%s" failed: %s',
+                    self.name, e)
             sock.close()
             return
 
@@ -188,13 +186,11 @@ class OvpnServer(object):
     def _send_cmd(self, cmd):
         try:
             self._socket.send(cmd.replace(b'\n', b'\\n') + b'\n')
-        except socket.error as e:
-            if e.args[0] == errno.EPIPE:
-                self.log.error('socket for OpenVPN server "%s" was ' \
-                        'unexpectedly closed' % self.name)
-                self.close_mgmt()
-            else:
-                raise
+        except BrokenPipeError as ex:
+            self.log.error(
+                'socket for OpenVPN server "%s" was unexpectedly closed: %s',
+                self.name, ex)
+            self.close_mgmt()
 
     def disconnect_client(self, common_name):
         """Disconnects the specified client from this OpenVPN server instance.
@@ -325,4 +321,3 @@ class OvpnServerSupervisor(object):
         if not self._server.connected:
             self._server.connect_to_mgmt()
         self._add_myself()
-

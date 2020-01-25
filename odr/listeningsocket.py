@@ -24,7 +24,7 @@ import socket
 from socket import socket as SocketType
 
 
-class SocketLocalAddressBindFailed(Exception):
+class SocketLocalAddressBindFailed(OSError):
     """For some reason, the requested local address / port combination could not
     be bound to.
     """
@@ -55,18 +55,17 @@ class ListeningSocket(object):
             self._socket.setsockopt(socket.SOL_SOCKET, socket.SO_BINDTODEVICE,
                     self.listen_device.encode("utf-8") + b'\0')
 
-        try :
+        try:
             self._socket.bind((self.listen_address, self.listen_port))
-        except socket.error as msg:
-            err = msg.args[0]
-            if err == errno.EADDRNOTAVAIL:
+        except OSError as ex:
+            if ex.errno == errno.EADDRNOTAVAIL:
                 raise SocketLocalAddressNotAvailable(
                         self.listen_address, self.listen_port,
                         self.listen_device)
             else:
                 raise SocketLocalAddressBindFailed(
                         self.listen_address, self.listen_port,
-                        self.listen_device, msg)
+                        self.listen_device)
 
     @property
     def socket(self) -> SocketType:
