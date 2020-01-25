@@ -487,6 +487,7 @@ class OvpnCmdConn(CommandConnection):
         @param val: A CC_RET_* value.
         """
         self._log.debug('writing deferred return value %d', val)
+        assert self._ret_f is not None
         ovpn.write_deferred_ret_file(self._ret_f, val)
         self._wrote_ret = True
 

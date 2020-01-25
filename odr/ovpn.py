@@ -21,8 +21,13 @@ import os
 import socket
 import logging
 import errno
+import time
 from odr.queue import StateQueue
 from odr.linesocket import LineSocket
+from odr.socketloop import SocketLoop
+from odr.timeoutmgr import TimeoutManager
+
+from typing import Optional, TextIO
 
 
 CC_RET_FAILED = 0
@@ -30,7 +35,7 @@ CC_RET_SUCCEEDED = 1
 CC_RET_DEFERRED = 2
 
 
-def write_deferred_ret_file(fp, val):
+def write_deferred_ret_file(fp: TextIO, val: object) -> None:
     """Write one of the deferral values to the deferred return value file.
 
     @param fp: File pointer of the deferred return value file.
@@ -42,7 +47,7 @@ def write_deferred_ret_file(fp, val):
     os.fsync(fp.fileno())
 
 
-def determine_daemon_name(script_name):
+def determine_daemon_name(script_name) -> Optional[str]:
     """We identify the OpenVPN server instance calling us by either looking at
     an environment variable or by trying to deduce the name from the way we
     were called.
@@ -83,7 +88,7 @@ class OvpnServer(object):
     """Represents a single OpenVPN server and allows communication with the
     server (via the management console).
     """
-    def __init__(self, sloop, name, socket_fn):
+    def __init__(self, sloop: SocketLoop, name: str, socket_fn: str) -> None:
         """\
         @param sloop: Instance of the socket loop.
         @param name: Freely choosable, unique identifier of the server.
@@ -94,7 +99,7 @@ class OvpnServer(object):
         self._socket_fn = socket_fn
 
         self.log = logging.getLogger('ovpnsrv')
-        self._socket = None
+        self._socket = None  # type: Optional[LineSocket]
         self._cmd_state = StateQueue(idle_state=_OvpnIdleState())
 
         self.connect_to_mgmt()
@@ -145,10 +150,11 @@ class OvpnServer(object):
             # from the sloop.
             self._socket.close()
 
-    def __cmp__(self, other):
-        return cmp(self.name, other.name)
+    # this was implemented on the original as __cmp__. I can't find any use of it yet.
+    def __eq__(self, other):
+        return self.name == other.name
 
-    def __hash__(self):
+    def __hash__(self) -> int:
         return hash(self._name)
 
     def __str__(self):
@@ -276,11 +282,11 @@ class _OvpnDisconnectClientsState(object):
     """Uses an OpenVPN management socket to asynchronously disconnect a client.
     """
 
-    def __init__(self, ovpn, common_name, done_clb):
+    def __init__(self, ovpn, common_name, done_clb) -> None:
         self._done = done_clb
         ovpn._send_cmd(b'kill %s' % common_name)
 
-    def handle_line(self, line):
+    def handle_line(self, line) -> bool:
         if line.startswith('SUCCESS:'):
             self._done(True)
             return False
@@ -294,7 +300,7 @@ class OvpnServerSupervisor(object):
     """Makes sure the associated OpenVPN server has an active management
     connection.
     """
-    def __init__(self, timeout_mgr, server, timeout):
+    def __init__(self, timeout_mgr: TimeoutManager, server: OvpnServer, timeout: float) -> None:
         self._timeout_mgr = timeout_mgr
         self._server = server
         self._timeout = timeout
@@ -305,18 +311,17 @@ class OvpnServerSupervisor(object):
         self._add_myself()
 
     def _add_myself(self):
-        import time
         self._timeout_time = time.time() + self._timeout
         self._timeout_mgr.add_timeout_object(self)
 
-    def __del__(self):
+    def __del__(self) -> None:
         self.log.debug('no longer watching server connection %s' % self._server)
 
     @property
     def timeout_time(self):
         return self._timeout_time
 
-    def handle_timeout(self):
+    def handle_timeout(self) -> None:
         if not self._server.connected:
             self._server.connect_to_mgmt()
         self._add_myself()
