@@ -1076,7 +1076,7 @@ def main() -> None:
     signal.signal(signal.SIGHUP, signal.SIG_IGN)
 
     timeout_mgr = TimeoutManager()
-    sloop.add_idle_handler(timeout_mgr)
+    sloop.add_idle_handler(timeout_mgr.check_timeouts)
 
     requestor_mgr = odr.dhcprequestor.DhcpAddressRequestorManager()
 

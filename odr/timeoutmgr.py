@@ -102,6 +102,3 @@ class TimeoutManager(object):
                 self._timeout_objects.append(timeout_object)
             else:
                 timeout_object.handle_timeout()
-
-    def __call__(self) -> None:
-        self.check_timeouts()
