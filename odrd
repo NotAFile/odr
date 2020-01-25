@@ -41,7 +41,7 @@ from typing import Dict, Optional, Any, List, Tuple, Iterator, TextIO
 
 import odr.ovpn as ovpn
 from odr.cmdconnection import CommandConnection, CommandConnectionListener
-from odr.timeoutmgr import TimeoutManager
+from odr.timeoutmgr import TimeoutManager, TimeoutObject
 from odr.socketloop import SocketLoop
 import odr.dhcprequestor
 import odr.listeningsocket
@@ -92,13 +92,47 @@ class ParseUsername(object):
                 'realm':realm}
 
 
+class RealmData(object):
+    """A RealmData object contains all data relevant for a specific realm.
+    The attributes are injected at configuration-load-time.
+    """
+    def __init__(self, name, parent=None) -> None:
+        self.name = name
+        if parent is not None:
+            self.vid = parent.vid
+            self.dhcp_local_port = parent.dhcp_local_port
+            self.dhcp_listening_device = parent.dhcp_listening_device
+            self.dhcp_listening_ip = parent.dhcp_listening_ip
+            self.provide_default_route = parent.provide_default_route
+            self.default_gateway_ipv4 = parent.default_gateway_ipv4
+            self.subnet_ipv6 = parent.subnet_ipv6
+            self.default_gateway_ipv6 = parent.default_gateway_ipv6
+            self.static_routes_ipv4 = parent.static_routes_ipv4
+            self.static_routes_ipv6 = parent.static_routes_ipv6
+            self.dhcp_server_ips = parent.dhcp_server_ips
+            self.expected_dhcp_lease_time = parent.expected_dhcp_lease_time
+        else:
+            self.vid = None
+            self.dhcp_local_port = 67
+            self.dhcp_listening_device = None
+            self.dhcp_listening_ip = None
+            self.provide_default_route = True
+            self.default_gateway_ipv4 = None
+            self.subnet_ipv6 = None
+            self.default_gateway_ipv6 = None
+            self.static_routes_ipv4 = None
+            self.static_routes_ipv6 = None
+            self.dhcp_server_ips = None
+            self.expected_dhcp_lease_time = None
+
+
 class OvpnClient(object):
     """Represents an OpenVPN client connected to a specific OpenVPN server
     instance.
     """
 
     def __init__(self, timeout_mgr: TimeoutManager, refresh_lease_clb, full_username: str,
-                 server: ovpn.OvpnServer, realm_data: Dict[str, RealmData], leased_ip_address=None,
+                 server: ovpn.OvpnServer, realm_data: RealmData, leased_ip_address=None,
                  rebinding_timeout: int = None, lease_timeout: int = None) -> None:
         self._timeout_mgr = timeout_mgr
         self._refresh_lease = refresh_lease_clb
@@ -109,6 +143,7 @@ class OvpnClient(object):
         self._rebinding_timeout = rebinding_timeout
         self._lease_timeout = lease_timeout
 
+        self._timeout_obj = None  # type: Optional[TimeoutObject]
         self._log = logging.getLogger('ovpnclient')
         self._killed = False
 
@@ -127,7 +162,8 @@ class OvpnClient(object):
             self._log.error('attempted to track lease for client "%s", but no ' \
                     'lease available.', self)
             return
-        self._timeout_mgr.add_timeout_object(self)
+        self._timeout_obj = TimeoutObject(self._rebinding_timeout, self.handle_timeout)
+        self._timeout_mgr.add_timeout_object(self._timeout_obj)
 
     def kill(self) -> None:
         """Disable the client.  Although any pending activities will continue,
@@ -141,14 +177,6 @@ class OvpnClient(object):
         @return: Returns True if the instance has been killed, otherwise False.
         """
         return self._killed
-
-    @property
-    def timeout_time(self) -> Optional[int]:
-        """Point in time at which the client's lease on the IP address has
-        reached the rebinding timeout.
-        @return: Returns rebinding timeout in seconds.
-        """
-        return self._rebinding_timeout
 
     def handle_timeout(self) -> None:
         """Called as soon as the rebinding timeout occurs.
@@ -190,9 +218,11 @@ class OvpnClient(object):
 
         self._log.debug('DHCP refresh request succeeded: %s', repr(res))
         self._leased_ip_address = res['ip_address']
-        self._rebinding_timeout = res['rebinding_timeout']
+        rebinding_timeout = res['rebinding_timeout']  # type: int
+        self._rebinding_timeout = rebinding_timeout
         self._lease_timeout = res['lease_timeout']
-        self._timeout_mgr.add_timeout_object(self)
+        self._timeout_obj = TimeoutObject(self._rebinding_timeout, self.handle_timeout)
+        self._timeout_mgr.add_timeout_object(self._timeout_obj)
 
     def _handle_lease_refresh_failed(self) -> None:
         """Called as soon as the DHCP refresh request has completed and
@@ -805,39 +835,6 @@ def parse_static_routes_ipv6(data: str) -> List[Tuple[str, str]]:
         static_routes.append((network, gateway))
     return static_routes
 
-
-class RealmData(object):
-    """A RealmData object contains all data relevant for a specific realm.
-    The attributes are injected at configuration-load-time.
-    """
-    def __init__(self, name, parent=None) -> None:
-        self.name = name
-        if parent is not None:
-            self.vid = parent.vid
-            self.dhcp_local_port = parent.dhcp_local_port
-            self.dhcp_listening_device = parent.dhcp_listening_device
-            self.dhcp_listening_ip = parent.dhcp_listening_ip
-            self.provide_default_route = parent.provide_default_route
-            self.default_gateway_ipv4 = parent.default_gateway_ipv4
-            self.subnet_ipv6 = parent.subnet_ipv6
-            self.default_gateway_ipv6 = parent.default_gateway_ipv6
-            self.static_routes_ipv4 = parent.static_routes_ipv4
-            self.static_routes_ipv6 = parent.static_routes_ipv6
-            self.dhcp_server_ips = parent.dhcp_server_ips
-            self.expected_dhcp_lease_time = parent.expected_dhcp_lease_time
-        else:
-            self.vid = None
-            self.dhcp_local_port = 67
-            self.dhcp_listening_device = None
-            self.dhcp_listening_ip = None
-            self.provide_default_route = True
-            self.default_gateway_ipv4 = None
-            self.subnet_ipv6 = None
-            self.default_gateway_ipv6 = None
-            self.static_routes_ipv4 = None
-            self.static_routes_ipv6 = None
-            self.dhcp_server_ips = None
-            self.expected_dhcp_lease_time = None
 
 
 def process_realm(cfg, realm_name, realms, delayed_realms) -> None:
