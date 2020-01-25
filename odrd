@@ -37,6 +37,8 @@ import datetime
 import hashlib
 from ipaddress import IPv6Network
 
+from typing import Dict, Optional, Any, List, Tuple, Iterator, TextIO
+
 import odr.ovpn as ovpn
 from odr.cmdconnection import CommandConnection, CommandConnectionListener
 from odr.timeoutmgr import TimeoutManager
@@ -56,11 +58,11 @@ class ParseUsername(object):
     USERNAME_RE = re.compile(r'^(?P<username>[^/@]+)(/(?P<resource>[^/@]+))?' \
             r'(@((?P<domain>[^/@]+)/)?(?P<realm>[^/@]+))?$')
 
-    def __init__(self, default_realm):
+    def __init__(self, default_realm: str) -> None:
         self._default_realm = default_realm
         self._log = logging.getLogger('parseusername')
 
-    def parse_username(self, full_username):
+    def parse_username(self, full_username: str) -> Optional[Dict[str, str]]:
         """Parse a full username into its components and apply any defaulting
         rules for the components.
 
@@ -95,9 +97,9 @@ class OvpnClient(object):
     instance.
     """
 
-    def __init__(self, timeout_mgr, refresh_lease_clb, full_username,
-                server, realm_data, leased_ip_address=None,
-                rebinding_timeout=None, lease_timeout=None):
+    def __init__(self, timeout_mgr: TimeoutManager, refresh_lease_clb, full_username: str,
+                 server: ovpn.OvpnServer, realm_data: Dict[str, RealmData], leased_ip_address=None,
+                 rebinding_timeout: int = None, lease_timeout: int = None) -> None:
         self._timeout_mgr = timeout_mgr
         self._refresh_lease = refresh_lease_clb
         self.full_username = full_username
@@ -110,14 +112,14 @@ class OvpnClient(object):
         self._log = logging.getLogger('ovpnclient')
         self._killed = False
 
-    def __str__(self):
+    def __str__(self) -> str:
         return '%s on %s' % (self.full_username, self.server)
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return "<OvpnClient(common_name=%s, server=%s, ...)>" % (
                 self.full_username, self.server)
 
-    def track_lease(self):
+    def track_lease(self) -> None:
         """Start keeping track of the DHCP lease time and make sure the lease
         is refreshed early enough.
         """
@@ -127,28 +129,28 @@ class OvpnClient(object):
             return
         self._timeout_mgr.add_timeout_object(self)
 
-    def kill(self):
+    def kill(self) -> None:
         """Disable the client.  Although any pending activities will continue,
         no new activities will be started.
         """
         self._killed = True
 
     @property
-    def iszombie(self):
+    def iszombie(self) -> bool:
         """Has this client instance been killed?
         @return: Returns True if the instance has been killed, otherwise False.
         """
         return self._killed
 
     @property
-    def timeout_time(self):
+    def timeout_time(self) -> Optional[int]:
         """Point in time at which the client's lease on the IP address has
         reached the rebinding timeout.
         @return: Returns rebinding timeout in seconds.
         """
         return self._rebinding_timeout
 
-    def handle_timeout(self):
+    def handle_timeout(self) -> None:
         """Called as soon as the rebinding timeout occurs.
         """
         if self.iszombie:
@@ -177,7 +179,7 @@ class OvpnClient(object):
             self._log.exception('Adding a new DHCP refresh request failed')
             self.server.disconnect_client(self.full_username)
 
-    def _handle_lease_refresh_succeeded(self, res):
+    def _handle_lease_refresh_succeeded(self, res) -> None:
         """Called as soon as the DHCP refresh request has completed and
         succeeded.  Takes care of remembering the new lease and refreshing
         again in time.
@@ -192,7 +194,7 @@ class OvpnClient(object):
         self._lease_timeout = res['lease_timeout']
         self._timeout_mgr.add_timeout_object(self)
 
-    def _handle_lease_refresh_failed(self):
+    def _handle_lease_refresh_failed(self) -> None:
         """Called as soon as the DHCP refresh request has completed and
         failed or has timed out.  Takes care of disconnecting the client, as
         the lease has obviously no chance of remaining established.
@@ -215,8 +217,8 @@ class OvpnClientManager(object):
           disconnect hook gets processed by OpenVPN or as soon as the next
           client list poll completes.
     """
-    def __init__(self, timeout_mgr, realms_data, parse_username_clb, servers,
-            refresh_lease_clb, sync_interval=60):
+    def __init__(self, timeout_mgr, realms_data: Dict[str, RealmData], parse_username_clb, servers,
+            refresh_lease_clb, sync_interval=60) -> None:
         """\
         @param timeout_mgr: Reference to a timeout manager.
         @param realms_data: Map of realm names to realm data structures.
@@ -234,16 +236,16 @@ class OvpnClientManager(object):
         self._sync_interval = sync_interval
 
         self._log = logging.getLogger('ovpnclientmgr')
-        self._clients_by_username = {}
+        self._clients_by_username = {}  # type: Dict[str, OvpnClient]
 
-        self._clients_by_server = {}
+        self._clients_by_server = {}  # type: Dict[str, Dict[str, OvpnClient]]
         for server in self._servers.values():
             self._clients_by_server[server] = {}
 
         self._timeout_mgr.add_rel_timeout(0, WeakBoundMethod(
                 self._on_sync_clients))
 
-    def create_client(self, **kwargs):
+    def create_client(self, **kwargs) -> OvpnClient:
         """Create and keep track of an OpenVPN client connection.  All keyword
         arguments are passed on to OvpnClient's constructor.
         @return: Returns the newly created OvpnClient instance.
@@ -254,7 +256,7 @@ class OvpnClientManager(object):
         self._add_client(client)
         return client
 
-    def _add_client(self, client):
+    def _add_client(self, client) -> None:
         """Add a client, based on a completed and successful DHCP request.
         """
         if client.full_username in self._clients_by_username:
@@ -267,7 +269,7 @@ class OvpnClientManager(object):
         self._clients_by_username[client.full_username] = client
         self._clients_by_server[client.server][client.full_username] = client
 
-    def sync_clients(self):
+    def sync_clients(self) -> None:
         """Syncs the client list with the client lists of each OpenVPN server.
 
         Any client connected to the server but not listed by us needs to be
@@ -282,14 +284,14 @@ class OvpnClientManager(object):
             server.poll_client_list(partial(self._sync_clients_with,
                     server=server))
 
-    def _on_sync_clients(self):
+    def _on_sync_clients(self) -> None:
         """Timeout event handler to regularly sync clients.  See sync_clients().
         """
         self.sync_clients()
         self._timeout_mgr.add_rel_timeout(self._sync_interval,
                 WeakBoundMethod(self._on_sync_clients))
 
-    def _sync_clients_with(self, client_data_list, server):
+    def _sync_clients_with(self, client_data_list, server) -> None:
         """Called per-server as soon as the server's client data list has
         been retrieved.  Performs the actual processing as documented for
         sync_clients().
@@ -335,7 +337,7 @@ class OvpnClientManager(object):
                             client)
                 self._del_client(client)
 
-    def _del_client(self, client):
+    def _del_client(self, client) -> None:
         """Kills a client instance and removes it from the manager's knowledge.
         In case the client has some pending operations, it might live on for
         some time.
@@ -345,7 +347,7 @@ class OvpnClientManager(object):
         del self._clients_by_username[client.full_username]
         del self._clients_by_server[client.server][client.full_username]
 
-    def client_disconnected(self, full_username, server):
+    def client_disconnected(self, full_username, server) -> None:
         """Called when a client was disconnected.
         """
         if server not in self._clients_by_server:
@@ -366,7 +368,7 @@ class OvpnClientManager(object):
             self._log.debug('disconnected %s', client)
         self._del_client(client)
 
-    def _create_detected_client(self, full_username, server, leased_ip_address):
+    def _create_detected_client(self, full_username, server, leased_ip_address) -> None:
         """Create a client instance without knowledge of the last DHCP lease
         refresh time.  Therefore, the client's next lease update time is set to
         "soon".
@@ -407,7 +409,7 @@ class OvpnCmdConn(CommandConnection):
     hooks.
     """
     def __init__(self, sloop, sock, realms_data, servers, secret, add_request_clb,
-            parse_username_clb, create_client_clb, remove_client_clb):
+            parse_username_clb, create_client_clb, remove_client_clb) -> None:
         """\
         @param sloop: Socket loop instance.  (See CommandConnection for
             details.)
@@ -435,12 +437,12 @@ class OvpnCmdConn(CommandConnection):
         self._remove_client = remove_client_clb
         self._ret_f = None
         self._wrote_ret = False
-        self._config_f = None
+        self._config_f = None  # type: Optional[TextIO]
         self._full_username = None
         self._server = None
-        self._realm_data = None
+        self._realm_data = None  # type: Optional[RealmData]
 
-    def __del__(self):
+    def __del__(self) -> None:
         self._log.debug('destructing OvpnCmdConn')
         if self._ret_f is not None:
             if not self._wrote_ret:
@@ -450,7 +452,7 @@ class OvpnCmdConn(CommandConnection):
             self._config_f.close()
         CommandConnection.__del__(self)
 
-    def _write_ret(self, val):
+    def _write_ret(self, val) -> None:
         """Write a specific return value to the deferred return value file.
         @param val: A CC_RET_* value.
         """
@@ -458,7 +460,7 @@ class OvpnCmdConn(CommandConnection):
         ovpn.write_deferred_ret_file(self._ret_f, val)
         self._wrote_ret = True
 
-    def _success_handler(self, res):
+    def _success_handler(self, res) -> None:
         """Called as soon as the DHCP address request has completed and
         succeeded.  Takes care of passing on the received parameters to the
         OpenVPN server and remembering the client for later lease refreshing.
@@ -480,6 +482,7 @@ class OvpnCmdConn(CommandConnection):
             return
 
         self._log.debug('writing OpenVPN client configuration')
+        assert self._config_f is not None and self._realm_data is not None
         self._config_f.seek(0)
 
         self._config_f.write('ifconfig-push %s %s\n' % (res['ip_address'],
@@ -493,13 +496,13 @@ class OvpnCmdConn(CommandConnection):
             hasher = hashlib.sha256()
             hasher.update((self._full_username + today + self._secret).encode('utf-8'))
             hash_hex = hasher.hexdigest()[:16]
-            network = IPv6Network(prefix).network_address
-            ip6_address = str(network + int(hash_hex, 16))
+            ipv6_network = IPv6Network(prefix).network_address
+            ip6_address = str(ipv6_network + int(hash_hex, 16))
 
             if self._realm_data.default_gateway_ipv6 is not None:
                 ip6_gateway = self._realm_data.default_gateway_ipv6
             else:
-                ip6_gateway = str(network + 1)
+                ip6_gateway = str(ipv6_network + 1)
 
             self._config_f.write('ifconfig-ipv6-push %s %s\n' % (ip6_address, ip6_gateway))
 
@@ -523,7 +526,7 @@ class OvpnCmdConn(CommandConnection):
             elif 'gateway' in res or self._realm_data.default_gateway_ipv4 is not None:
                 self._config_f.write('push "redirect-gateway def1"\n')
         else:
-            static_routes_ipv4 = []
+            static_routes_ipv4 = []  # type: List[str]
             if self._realm_data.static_routes_ipv4 is not None:
                 static_routes_ipv4 += self._realm_data.static_routes_ipv4
             if 'static_routes' in res:
@@ -533,7 +536,7 @@ class OvpnCmdConn(CommandConnection):
                     self._config_f.write('push "route %s %s %s"\n' % (network,
                             netmask, gateway))
 
-            static_routes_ipv6 = []
+            static_routes_ipv6 = []  # type: List[str]
             if self._realm_data.subnet_ipv6 is not None and self._realm_data.static_routes_ipv6 is not None:
                 static_routes_ipv6 += self._realm_data.static_routes_ipv6
             if len(static_routes_ipv6) > 0:
@@ -559,14 +562,14 @@ class OvpnCmdConn(CommandConnection):
                 rebinding_timeout=res['rebinding_timeout'],
                 lease_timeout=res['lease_timeout'])
 
-    def _failure_handler(self):
+    def _failure_handler(self) -> None:
         """Called as soon as the DHCP address request has failed or timed out.
         Takes care of notifying the OpenVPN server of the failure.
         """
         self._log.debug('DHCP request failed')
         self._write_ret(ovpn.CC_RET_FAILED)
 
-    def handle_cmd(self, cmd, params, files):
+    def handle_cmd(self, cmd, params, files) -> None:
         """Called for each command received over the command socket.  Forwards
         the command processing according to the command's name.
 
@@ -583,7 +586,7 @@ class OvpnCmdConn(CommandConnection):
             self._log.warning('received unknown command "%s"', cmd)
             return
 
-    def _handle_request_cmd(self, cmd, params, files):
+    def _handle_request_cmd(self, cmd, params, files) -> None:
         """Handles the command for sending an initial DHCP address request.
         """
         try:
@@ -628,7 +631,8 @@ class OvpnCmdConn(CommandConnection):
             self._log.error('unknown server "%s"', server_name)
             return
 
-        self._realm_data = self._realms_data[realm]
+        realm_data = self._realms_data[realm]
+        self._realm_data = realm_data
         self._server = self._servers[server_name]
 
         self.send_cmd('OK')
@@ -639,15 +643,15 @@ class OvpnCmdConn(CommandConnection):
             self._add_request(success_handler_clb=self._success_handler,
                     failure_handler_clb=self._failure_handler,
                     client_identifier=self._full_username,
-                    device=self._realm_data.dhcp_listening_device,
-                    local_ip=self._realm_data.dhcp_listening_ip,
-                    local_port=self._realm_data.dhcp_local_port,
-                    server_ips=self._realm_data.dhcp_server_ips,
-                    lease_time=self._realm_data.expected_dhcp_lease_time)
+                    device=realm_data.dhcp_listening_device,
+                    local_ip=realm_data.dhcp_listening_ip,
+                    local_port=realm_data.dhcp_local_port,
+                    server_ips=realm_data.dhcp_server_ips,
+                    lease_time=realm_data.expected_dhcp_lease_time)
         except:
             self._log.exception('Adding a new DHCP request failed')
 
-    def _handle_disconnect_cmd(self, cmd, params, files):
+    def _handle_disconnect_cmd(self, cmd, params, files) -> None:
         """Handles the command for informing us of a client disconnect.
         """
         try:
@@ -669,7 +673,7 @@ class OvpnCmdConn(CommandConnection):
         self._remove_client(full_username, server)
 
 
-def cfg_get_def(cfg, sect, opt, default=None):
+def cfg_get_def(cfg, sect, opt, default=None) -> str:
     """Small helper to allow configuration options with program-defined
     defaults.
     """
@@ -678,7 +682,7 @@ def cfg_get_def(cfg, sect, opt, default=None):
     else:
         return default
 
-def cfg_getint_def(cfg, sect, opt, default=None):
+def cfg_getint_def(cfg, sect, opt, default=None) -> int:
     """Small helper to allow configuration options with program-defined
     defaults.
     """
@@ -687,7 +691,7 @@ def cfg_getint_def(cfg, sect, opt, default=None):
     else:
         return default
 
-def cfg_getboolean_def(cfg, sect, opt, default=None):
+def cfg_getboolean_def(cfg, sect, opt, default=None) -> bool:
     """Small helper to allow configuration options with program-defined
     defaults.
     """
@@ -696,7 +700,7 @@ def cfg_getboolean_def(cfg, sect, opt, default=None):
     else:
         return default
 
-def split_cfg_list(val, split=','):
+def split_cfg_list(val, split=',') -> List[str]:
     """Split a string along "split" characters - ignoring any spaces
     surrounding the split characters.
     @param val: The string to split at the split characters.
@@ -706,7 +710,7 @@ def split_cfg_list(val, split=','):
     """
     return [v.strip() for v in val.split(split) if (len(v.strip()) > 0)]
 
-def cfg_iterate(cfg, section_type):
+def cfg_iterate(cfg, section_type) -> Iterator[Tuple[str, str]]:
     """Iterate over all config sections who's section names are prefixed with
     the specified section type.
     @param cfg: Config object to read the sections from.
@@ -720,7 +724,7 @@ def cfg_iterate(cfg, section_type):
         elem_name = sect_name[len(sec_start):]
         yield (sect_name, elem_name)
 
-def user_to_uid(user):
+def user_to_uid(user) -> int:
     """Transforms a user to a UID.  In case the user is already a UID, the
     UID is passed through unchanged.
     @param user: The user as string.  It may either be the username or the
@@ -737,7 +741,7 @@ def user_to_uid(user):
             sys.exit(1)
     return uid
 
-def group_to_gid(group):
+def group_to_gid(group) -> int:
     """Transforms a group to a GID.  In case the group is already a GID, the
     GID is passed through unchanged.
     @param group: The group as string.  It may either be the group name or the
@@ -755,7 +759,7 @@ def group_to_gid(group):
     return gid
 
 
-def get_ip_for_iface(iface):
+def get_ip_for_iface(iface) -> str:
     """Look up an IPv4 address on the given interface.
     @param iface: Interface name
     @return: Returns the IPv4 address as string.
@@ -770,7 +774,7 @@ def get_ip_for_iface(iface):
     return addrs[netifaces.AF_INET][0]['addr']
 
 
-def parse_static_routes_ipv4(data):
+def parse_static_routes_ipv4(data) -> List[Tuple[str, str, str]]:
     """Parses a string of the form
       0.0.0.0/0 via 10.0.98.120, 10.0.97.0/24 via 10.0.98.121
     @return: Returns a list of network, netmask and gateway tuples.
@@ -787,7 +791,7 @@ def parse_static_routes_ipv4(data):
     return static_routes
 
 
-def parse_static_routes_ipv6(data):
+def parse_static_routes_ipv6(data: str) -> List[Tuple[str, str]]:
     """Parses a string of the form
       ::/0 via fd00::1, fd01:1234::/64 via fd00::1
     @return: Returns a list of prefix and gateway tuples.
@@ -806,7 +810,7 @@ class RealmData(object):
     """A RealmData object contains all data relevant for a specific realm.
     The attributes are injected at configuration-load-time.
     """
-    def __init__(self, name, parent=None):
+    def __init__(self, name, parent=None) -> None:
         self.name = name
         if parent is not None:
             self.vid = parent.vid
@@ -836,7 +840,7 @@ class RealmData(object):
             self.expected_dhcp_lease_time = None
 
 
-def process_realm(cfg, realm_name, realms, delayed_realms):
+def process_realm(cfg, realm_name, realms, delayed_realms) -> None:
     sect = 'realm %s' % realm_name
 
     logging.debug('processing realm "%s"', realm_name)
@@ -906,20 +910,20 @@ def process_realm(cfg, realm_name, realms, delayed_realms):
                     realm_data.expected_dhcp_lease_time)
 
 
-def read_realms(cfg):
+def read_realms(cfg) -> Optional[Dict[str, RealmData]]:
     """Read all realms from the configuration file into a dictionary of
     RealmData objects.
     """
-    realms = {}
+    realms = {}  # type: Dict[str, RealmData]
 
-    delayed_realms = []
+    delayed_realms = []  # type: List[str]
     for sect, realm_name in cfg_iterate(cfg, 'realm'):
         process_realm(cfg, realm_name, realms, delayed_realms)
 
     # Did we have any delays, due to dependencies between realms?  Process them
     # now.
     while len(delayed_realms) > 0:
-        new_delayed_realms = []
+        new_delayed_realms = []  # type: List[str]
         for delayed_realm in delayed_realms:
             process_realm(cfg, delayed_realm, realms, new_delayed_realms)
 
@@ -932,7 +936,7 @@ def read_realms(cfg):
     return realms
 
 
-def drop_caps(user=None, group=None, caps=None):
+def drop_caps(user=None, group=None, caps=None) -> None:
     """Switches aways from UID 0 and full capabilities to a different user
     and a limited set of capabilities.  Child processes get none of the
     capabilities.
@@ -973,7 +977,7 @@ def drop_caps(user=None, group=None, caps=None):
     prctl.cap_inheritable.limit()
 
 
-def read_servers(cfg, sloop):
+def read_servers(cfg, sloop) -> Dict[str, ovpn.OvpnServer]:
     """Read all servers from the configuration file and connect to each of
     them.
     """
@@ -985,7 +989,7 @@ def read_servers(cfg, sloop):
     return servers
 
 
-def load_requestors(sloop, requestor_mgr, realms_data):
+def load_requestors(sloop, requestor_mgr, realms_data) -> bool:
     """Load all requestors, based on the existing realms.
 
     @param sloop: Socket loop instance.
@@ -1013,13 +1017,13 @@ def load_requestors(sloop, requestor_mgr, realms_data):
         return False
     return True
 
-def setup_logging(loglevel, use_syslog=False):
+def setup_logging(loglevel, use_syslog=False) -> None:
     root = logging.getLogger()
     root.setLevel(loglevel)
 
     if use_syslog:
         from logging.handlers import SysLogHandler
-        hdlr = SysLogHandler(address='/dev/log')
+        hdlr = SysLogHandler(address='/dev/log')  # type: logging.Handler
     else:
         hdlr = logging.StreamHandler()
 
@@ -1028,7 +1032,7 @@ def setup_logging(loglevel, use_syslog=False):
     root.addHandler(hdlr)
 
 
-def main():
+def main() -> None:
     prctl.set_name('odrd')
     prctl.set_proctitle(' '.join(sys.argv))
 
@@ -1065,7 +1069,7 @@ def main():
 
     sloop = SocketLoop()
 
-    def exit_daemon(*args):
+    def exit_daemon(*args) -> None:
         """Signal handler performing a soft shutdown of the loop.
         """
         logging.info('exiting on signal')
@@ -1086,7 +1090,7 @@ def main():
                 server=weakref.proxy(server),
                 timeout=30)
 
-    def start_dhcp_address_request(device, local_ip, **kwargs):
+    def start_dhcp_address_request(device, local_ip, **kwargs) -> None:
         requestor = requestor_mgr.get_requestor(device, local_ip)
         if requestor is None:
             return
@@ -1096,7 +1100,7 @@ def main():
                 local_ip=local_ip, **kwargs)
         requestor.add_request(request)
 
-    def start_dhcp_refresh_request(device, local_ip, **kwargs):
+    def start_dhcp_refresh_request(device, local_ip, **kwargs) -> None:
         requestor = requestor_mgr.get_requestor(device, local_ip)
         if requestor is None:
             return
@@ -1114,7 +1118,7 @@ def main():
             realms_data=realms_data,
             parse_username_clb=parse_username.parse_username)
 
-    def create_vpn_cmd_conn(sloop, sock):
+    def create_vpn_cmd_conn(sloop, sock) -> OvpnCmdConn:
         return OvpnCmdConn(sloop, sock,
                 realms_data=realms_data,
                 servers=servers,
@@ -1128,7 +1132,7 @@ def main():
             split_cfg_list(cfg_get_def(cfg, 'daemon', 'cmd_socket_uids', ''))]
     cmd_socket_gids = [group_to_gid(group) for group in \
             split_cfg_list(cfg_get_def(cfg, 'daemon', 'cmd_socket_gids', ''))]
-    def cmd_conn_auth_check(sock, pid, uid, gid):
+    def cmd_conn_auth_check(sock, pid, uid, gid) -> bool:
         if uid in cmd_socket_uids:
             return True
         if gid in cmd_socket_gids:
