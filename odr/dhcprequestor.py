@@ -22,9 +22,8 @@ import time
 import logging
 
 from typing import Dict, Optional, Tuple, List, Callable, Iterable, Any
-from ipaddress import IPv4Address
+from ipaddress import IPv4Address, IPv4Network
 
-from odr.route import network_mask
 from odr.listeningsocket import ListeningSocket
 from odr.timeoutmgr import TimeoutManager, TimeoutObject
 
@@ -219,6 +218,7 @@ class DhcpAddressRequest(object):
         parsed and a matching DHCP REQUEST packet is generated.
         """
         if self._state != self.AR_DISCOVER:
+            self._log.debug("received unsolicited offer")
             return
         self._log.debug("Received offer")
         if not self._valid_source_address(offer_packet):
@@ -572,19 +572,24 @@ def parse_classless_static_routes(data: List[int]) -> Optional[List[Tuple[str, s
             # Invalid number of octets.
             return None
 
-        network = remaining[:significant_octets] + \
-                [0] * (4 - significant_octets)
+        network_addr = bytes(remaining[:significant_octets]).ljust(4, b"\x00")
         remaining = remaining[significant_octets:]
 
-        mask = network_mask(mask_width)
+        network = IPv4Network((network_addr, mask_width))
 
-        gateway = remaining[:4]
+        gateway = bytes(remaining[:4])
         remaining = remaining[4:]
 
         if len(gateway) != 4:
             # List too short, malformed gateway.
             return None
-        routes.append((str(IPv4Address(network)), mask, str(IPv4Address(gateway))))
+        routes.append(
+            (
+                str(network.network_address),
+                str(network.netmask),
+                str(IPv4Address(gateway)),
+            )
+        )
 
     if len(remaining) > 0:
         # Failed to properly parse the option.

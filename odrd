@@ -35,7 +35,7 @@ from configparser import ConfigParser
 from functools import partial
 import datetime
 import hashlib
-from ipaddress import IPv6Network
+from ipaddress import IPv6Network, IPv4Network
 
 from typing import Dict, Optional, Any, List, Tuple, Iterator, TextIO
 
@@ -46,7 +46,6 @@ from odr.socketloop import SocketLoop
 import odr.dhcprequestor
 import odr.listeningsocket
 from odr.weakmethod import WeakBoundMethod
-from odr.route import network_mask
 
 
 CONFIG_FILE = '/etc/odr.conf'
@@ -570,9 +569,8 @@ class OvpnCmdConn(CommandConnection):
             static_routes_ipv6 = []  # type: List[str]
             if self._realm_data.subnet_ipv6 is not None and self._realm_data.static_routes_ipv6 is not None:
                 static_routes_ipv6 += self._realm_data.static_routes_ipv6
-            if len(static_routes_ipv6) > 0:
-                for network, gateway in static_routes_ipv6:
-                    self._config_f.write('push "route-ipv6 %s %s"\n' % (network, gateway))
+            for network, gateway in static_routes_ipv6:
+                self._config_f.write('push "route-ipv6 %s %s"\n' % (network, gateway))
 
         self._config_f.write('push "redirect-private"\n')
 
@@ -812,13 +810,13 @@ def parse_static_routes_ipv4(data) -> List[Tuple[str, str, str]]:
     """
     static_routes = []
     for static_route_str in split_cfg_list(data):
-        network, via, gateway = split_cfg_list(static_route_str, split=' ')
+        network_str, via, gateway = split_cfg_list(static_route_str, split=' ')
         if via != 'via':
             raise RuntimeError('Invalid static route format: "%s' % \
                     static_route_str)
-        network, mask_width = network.split('/')
-        netmask = network_mask(int(mask_width))
-        static_routes.append((network, netmask, gateway))
+        network = IPv4Network(network_str)
+        static_routes.append(
+            (str(network.network_address), str(network.netmask), gateway))
     return static_routes
 
 
