@@ -20,7 +20,7 @@
 import select
 import logging
 
-
+
 class SocketLoop:
     """Maintains a list of socket handlers.  Each handler may have a single
     socket.  Waits for activity on all known sockets and in case of activity for
@@ -29,6 +29,7 @@ class SocketLoop:
     Additionally, there are idle handlers that get called after socket activity
     processing or once after every timeout (if there was no activity at all).
     """
+
     def __init__(self):
         self._socket_handlers = {}
         self._idle_handlers = []
@@ -61,8 +62,9 @@ class SocketLoop:
             # We currently only care about read events. (Read events also cover
             # connect events on listening sockets.)
             try:
-                ready_input_sockets, _, _ = select.select(self.sockets, [], [],
-                        self.timeout)
+                ready_input_sockets, _, _ = select.select(
+                    self.sockets, [], [], self.timeout
+                )
             except InterruptedError:
                 continue
             self._handle_ready_input_sockets(ready_input_sockets)
@@ -72,16 +74,18 @@ class SocketLoop:
         """Add an additional socket handler.
         @param socket_handler: The socket handler instance to add.
         """
-        self.log.debug('adding socket_handler for socket %d' % \
-                socket_handler.socket.fileno())
+        self.log.debug(
+            'adding socket_handler for socket %d', socket_handler.socket.fileno()
+        )
         self._socket_handlers[socket_handler.socket] = socket_handler
 
     def del_socket_handler(self, socket_handler):
         """Remove a previously added socket handler.
         @param socket_handler: The socket handler instance to remove.
         """
-        self.log.debug('removing socket_handler for socket %d' % \
-                socket_handler.socket.fileno())
+        self.log.debug(
+            'removing socket_handler for socket %d', socket_handler.socket.fileno()
+        )
         del self._socket_handlers[socket_handler.socket]
 
     def add_idle_handler(self, idle_handler):

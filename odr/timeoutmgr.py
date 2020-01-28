@@ -20,7 +20,8 @@
 import time
 
 from typing import Callable, List
-
+
+
 class TimeoutObject:
     def __init__(self, timeout_time: float, timeout_func: Callable[[], None]) -> None:
         self.timeout_time = timeout_time
@@ -32,7 +33,7 @@ class TimeoutObject:
     def __repr__(self) -> str:
         return "<{} wrapping {!r}>".format(self.__class__, self._timeout_func)
 
-
+
 class TimeoutManager:
     """The TimeoutManager keeps track of objects that have a timeout time set.
     As soon as a timeout occurs, the affected objects are notified.
@@ -40,10 +41,13 @@ class TimeoutManager:
     Objects that have timed out are removed from the timeout managers list of
     objects.
     """
+
     def __init__(self) -> None:
         self._timeout_objects = []  # type: List[TimeoutObject]
 
-    def add_rel_timeout(self, timeout_secs: float, timeout_func: Callable[[], None]) -> TimeoutObject:
+    def add_rel_timeout(
+        self, timeout_secs: float, timeout_func: Callable[[], None]
+    ) -> TimeoutObject:
         """Adds a timeout event for a time in the near future, measured in
         seconds from the current point of time.  On timeout, the function
         timeout_func is called.
@@ -56,7 +60,9 @@ class TimeoutManager:
         """
         return self.add_abs_timeout(time.time() + timeout_secs, timeout_func)
 
-    def add_abs_timeout(self, timeout_time: float, timeout_func: Callable[[], None]) -> TimeoutObject:
+    def add_abs_timeout(
+        self, timeout_time: float, timeout_func: Callable[[], None]
+    ) -> TimeoutObject:
         """Adds a timeout event for a specific time.  On timeout, the function
         timeout_func is called.
 

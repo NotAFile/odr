@@ -27,6 +27,7 @@ import fdsend
 SCRIPT_NAME = 'odr-ovpn-disconnect'
 CMD_SOCKET = '/var/run/odr/cmd.sock'
 
+
 def main():
     #
     # Gather configuration
@@ -39,7 +40,7 @@ def main():
     # Build and submit command
     #
 
-    params = {'full_username':full_username}
+    params = {'full_username': full_username}
     if daemon_name is not None:
         params['daemon_name'] = daemon_name
 
@@ -51,8 +52,8 @@ def main():
     ret, _ = sock.recv(1024)
     status = json.loads(ret.decode("utf-8"))["cmd"]
     if status != 'OK':
-        raise RuntimeError('sending disconnect notification failed ' \
-                '(ret: "%s")' % ret)
+        raise RuntimeError('sending disconnect notification failed (ret: "%s")' % ret)
+
 
 if __name__ == '__main__':
     main()

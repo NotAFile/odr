@@ -23,24 +23,27 @@ import socket
 # reimport to prevent shadowing
 from socket import socket as SocketType
 
-
+
 class SocketLocalAddressBindFailed(OSError):
     """For some reason, the requested local address / port combination could not
     be bound to.
     """
 
+
 class SocketLocalAddressNotAvailable(SocketLocalAddressBindFailed):
     """The requested local address / port combination was not available.
     """
 
-
+
 class ListeningSocket:
     """A ListeningSocket represents a UDP socket listening for packets
     on a specific IP address and port on a specific network device, if
     desired.
     """
 
-    def __init__(self, listen_address: str, listen_port: int, listen_device: str = None) -> None:
+    def __init__(
+        self, listen_address: str, listen_port: int, listen_device: str = None
+    ) -> None:
         """\
         @param listen_address: IP address as string to listen on.
         @param listen_port: Local DHCP listening port. Defaults to 67.
@@ -52,24 +55,26 @@ class ListeningSocket:
         self._socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self._socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         if self.listen_device is not None:
-            self._socket.setsockopt(socket.SOL_SOCKET, socket.SO_BINDTODEVICE,
-                    self.listen_device.encode("utf-8") + b'\0')
+            self._socket.setsockopt(
+                socket.SOL_SOCKET,
+                socket.SO_BINDTODEVICE,
+                self.listen_device.encode("utf-8") + b'\0',
+            )
 
         try:
             self._socket.bind((self.listen_address, self.listen_port))
         except OSError as ex:
             if ex.errno == errno.EADDRNOTAVAIL:
                 raise SocketLocalAddressNotAvailable(
-                        self.listen_address, self.listen_port,
-                        self.listen_device)
+                    self.listen_address, self.listen_port, self.listen_device
+                )
             else:
                 raise SocketLocalAddressBindFailed(
-                        self.listen_address, self.listen_port,
-                        self.listen_device)
+                    self.listen_address, self.listen_port, self.listen_device
+                )
 
     @property
     def socket(self) -> SocketType:
         """@return: Returns the listening socket.
         """
         return self._socket
-

@@ -27,6 +27,7 @@ import fdsend
 SCRIPT_NAME = 'odr-ovpn-connect'
 CMD_SOCKET = '/var/run/odr/cmd.sock'
 
+
 def main():
     #
     # Gather configuration
@@ -41,9 +42,11 @@ def main():
     # Build and submit command
     #
 
-    params = {'full_username':full_username,
-            'ret_file_idx':'0',
-            'config_file_idx':'1'}
+    params = {
+        'full_username': full_username,
+        'ret_file_idx': '0',
+        'config_file_idx': '1',
+    }
     if daemon_name is not None:
         params['daemon_name'] = daemon_name
 
@@ -54,8 +57,7 @@ def main():
     try:
         result = {"cmd": "request"}
         result.update(params)
-        fdsend.sendfds(sock, json.dumps(result).encode("utf-8"),
-                       fds=[ret_f, cfg_f])
+        fdsend.sendfds(sock, json.dumps(result).encode("utf-8"), fds=[ret_f, cfg_f])
 
         ret, _ = fdsend.recvfds(sock, 1024, numfds=0)
 
@@ -65,6 +67,7 @@ def main():
     except Exception:
         ovpn.write_deferred_ret_file(ret_f, ovpn.CC_RET_FAILED)
         raise
+
 
 if __name__ == '__main__':
     main()

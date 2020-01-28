@@ -80,8 +80,9 @@ class CommandConnection:
         In case of EOF, the socket will be removed from the socket loop and this
         instance will get destroyed.
         """
-        cmd_line, fds = fdsend.recvfds(self._socket, self.MAX_MSG_SIZE,
-                numfds=self.MAX_NUM_FDS)
+        cmd_line, fds = fdsend.recvfds(
+            self._socket, self.MAX_MSG_SIZE, numfds=self.MAX_NUM_FDS
+        )
 
         # By wrapping the files in objects, they will be implicitly closed
         # (assuming a reference counted Python).
@@ -105,10 +106,9 @@ class CommandConnection:
         """
         result = {"cmd": cmd}
         result.update(params)
-        fdsend.sendfds(self._socket,
-                       json.dumps(result).encode("utf-8"), fds=files)
+        fdsend.sendfds(self._socket, json.dumps(result).encode("utf-8"), fds=files)
 
-    def handle_command(self,  cmd):
+    def handle_command(self, cmd):
         """The handle_command function is called as soon as a command was
         received and parsed by CommandConnection.  A sub-class should implement
         the stub function and do the actual command processing.
@@ -124,7 +124,7 @@ class CommandConnection:
         """
         raise NotImplementedError('Method handle_cmd not implemented')
 
-
+
 class CommandConnectionListener:
     """Listens on a POSIX Local IPC Socket (AKA Unix domain socket) and uses a
     factory function to create an instance that takes care of each new socket
@@ -133,8 +133,14 @@ class CommandConnectionListener:
 
     ACCEPT_QUEUE_LEN = 32
 
-    def __init__(self, sloop, cmd_conn_factory, socket_path,
-                socket_perm_mode=0o666, auth_check=None):
+    def __init__(
+        self,
+        sloop,
+        cmd_conn_factory,
+        socket_path,
+        socket_perm_mode=0o666,
+        auth_check=None,
+    ):
         """Opens the POSIX Local IPC Socket.  If the file already exists, it
         is deleted first.  The file permissions are set according to the
         socket_perm_mode parameter.
@@ -186,14 +192,19 @@ class CommandConnectionListener:
         if self._auth_check is not None:
             pid, uid, gid = getsockpeercred(sock)
             if not self._auth_check(sock=sock, pid=pid, uid=uid, gid=gid):
-                self._log.info('rejecting command connection to %s from ' \
-                        'PID %d (UID %d, GID %d)' % (self._socket_path, pid,
-                                uid, gid))
+                self._log.info(
+                    'rejecting command connection to %s from '
+                    'PID %d (UID %d, GID %d)',
+                    self._socket_path,
+                    pid,
+                    uid,
+                    gid,
+                )
                 sock.close()
                 return
         conn = self._factory(sloop=self._sloop, sock=sock)
 
-
+
 def getsockpeercred(sock):
     """Retrieves the credentials of a peer which is connected via a AF_UNIX
     socket.
@@ -204,5 +215,7 @@ def getsockpeercred(sock):
     # SO_PEERCRED returns a struct ucred.  The three struct members pid_t, uid_t
     # and gid_t are defined as "int" on Linux systems, so this should be
     # portable across Linux architectures.
-    return struct.unpack('3i', sock.getsockopt(socket.SOL_SOCKET,
-            socket.SO_PEERCRED, struct.calcsize('3i')))
+    return struct.unpack(
+        '3i',
+        sock.getsockopt(socket.SOL_SOCKET, socket.SO_PEERCRED, struct.calcsize('3i')),
+    )
