@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# vim:set fileencoding=utf-8 ft=python ts=8 sw=4 sts=4 et cindent:
 
 # odrd -- OpenVPN DHCP Requestor daemon
 #
@@ -51,7 +50,7 @@ from odr.weakmethod import WeakBoundMethod
 CONFIG_FILE = '/etc/odr.conf'
 
 
-class ParseUsername(object):
+class ParseUsername:
     """Provides parsing of full usernames into their components.
     """
     USERNAME_RE = re.compile(r'^(?P<username>[^/@]+)(/(?P<resource>[^/@]+))?' \
@@ -91,7 +90,7 @@ class ParseUsername(object):
                 'realm':realm}
 
 
-class RealmData(object):
+class RealmData:
     """A RealmData object contains all data relevant for a specific realm.
     The attributes are injected at configuration-load-time.
     """
@@ -125,7 +124,7 @@ class RealmData(object):
             self.expected_dhcp_lease_time = None
 
 
-class OvpnClient(object):
+class OvpnClient:
     """Represents an OpenVPN client connected to a specific OpenVPN server
     instance.
     """
@@ -147,10 +146,10 @@ class OvpnClient(object):
         self._killed = False
 
     def __str__(self) -> str:
-        return '%s on %s' % (self.full_username, self.server)
+        return '{} on {}'.format(self.full_username, self.server)
 
     def __repr__(self) -> str:
-        return "<OvpnClient(common_name=%s, server=%s, ...)>" % (
+        return "<OvpnClient(common_name={}, server={}, ...)>".format(
                 self.full_username, self.server)
 
     def track_lease(self) -> None:
@@ -234,7 +233,7 @@ class OvpnClient(object):
         self.server.disconnect_client(self.full_username)
 
 
-class OvpnClientManager(object):
+class OvpnClientManager:
     """Manages a list of all clients currently connected to all known OpenVPN
     servers.  Takes care of regularly refreshing the client's DHCP leases.
 
@@ -515,7 +514,7 @@ class OvpnCmdConn(CommandConnection):
         assert self._config_f is not None and self._realm_data is not None
         self._config_f.seek(0)
 
-        self._config_f.write('ifconfig-push %s %s\n' % (res['ip_address'],
+        self._config_f.write('ifconfig-push {} {}\n'.format(res['ip_address'],
                 res['subnet_mask']))
         self._config_f.write('push "ip-win32 dynamic"\n')
 
@@ -534,7 +533,7 @@ class OvpnCmdConn(CommandConnection):
             else:
                 ip6_gateway = str(ipv6_network + 1)
 
-            self._config_f.write('ifconfig-ipv6-push %s %s\n' % (ip6_address, ip6_gateway))
+            self._config_f.write('ifconfig-ipv6-push {} {}\n'.format(ip6_address, ip6_gateway))
 
         if self._realm_data.vid is not None:
             self._config_f.write('vlan-pvid %d\n' % self._realm_data.vid)
@@ -563,14 +562,14 @@ class OvpnCmdConn(CommandConnection):
                 static_routes_ipv4 += res['static_routes']
             if len(static_routes_ipv4) > 0:
                 for network, netmask, gateway in static_routes_ipv4:
-                    self._config_f.write('push "route %s %s %s"\n' % (network,
+                    self._config_f.write('push "route {} {} {}"\n'.format(network,
                             netmask, gateway))
 
             static_routes_ipv6 = []  # type: List[str]
             if self._realm_data.subnet_ipv6 is not None and self._realm_data.static_routes_ipv6 is not None:
                 static_routes_ipv6 += self._realm_data.static_routes_ipv6
             for network, gateway in static_routes_ipv6:
-                self._config_f.write('push "route-ipv6 %s %s"\n' % (network, gateway))
+                self._config_f.write('push "route-ipv6 {} {}"\n'.format(network, gateway))
 
         self._config_f.write('push "redirect-private"\n')
 
