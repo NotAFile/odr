@@ -19,7 +19,7 @@
 
 import weakref
 
-
+
 class WeakBoundMethod:
     """Used to create a proxy method of a bound method, which weakly references
     the method's binding instance.
@@ -36,6 +36,8 @@ class WeakBoundMethod:
 
         >>> e = Example()
         >>> wmeth = WeakBoundMethod(e.print_num)
+        >>> wmeth
+        <WeakBoundMethod wrapping <...Example...> and <function Example.print_num...>>
 
     The proxy method works as expected:
 
@@ -86,9 +88,6 @@ class WeakBoundMethod:
         return self._free_method(instance, *args, **kwargs)
 
     def __repr__(self):
-        return "<{} wrapping {!r} and {!r}>".format(self.__class__,
-                self._weak_instance(), self._free_method)
-
-if __name__ == '__main__':
-    import doctest
-    doctest.testmod()
+        return "<{} wrapping {!r} and {!r}>".format(
+            self.__class__.__name__, self._weak_instance(), self._free_method
+        )
