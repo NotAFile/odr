@@ -22,7 +22,7 @@ import os
 import socket
 import json
 import odr.ovpn as ovpn
-import fdsend
+from odr import fdsend
 
 SCRIPT_NAME = 'odr-ovpn-connect'
 CMD_SOCKET = '/var/run/odr/cmd.sock'
@@ -57,9 +57,9 @@ def main():
     try:
         result = {"cmd": "request"}
         result.update(params)
-        fdsend.sendfds(sock, json.dumps(result).encode("utf-8"), fds=[ret_f, cfg_f])
+        fdsend.send_fds(sock, json.dumps(result).encode("utf-8"), fds=[ret_f, cfg_f])
 
-        ret, _ = fdsend.recvfds(sock, 1024, numfds=0)
+        ret, _ = sock.recv(1024)
 
         status = json.loads(ret.decode("utf-8"))["cmd"]
         if status != 'OK':

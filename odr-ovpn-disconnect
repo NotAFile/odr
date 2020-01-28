@@ -22,7 +22,6 @@ import os
 import socket
 import json
 import odr.ovpn as ovpn
-import fdsend
 
 SCRIPT_NAME = 'odr-ovpn-disconnect'
 CMD_SOCKET = '/var/run/odr/cmd.sock'

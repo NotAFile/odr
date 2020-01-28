@@ -23,7 +23,7 @@ import socket
 import os
 import struct
 import json
-import fdsend
+from . import fdsend
 
 
 class CommandConnection:
@@ -80,8 +80,8 @@ class CommandConnection:
         In case of EOF, the socket will be removed from the socket loop and this
         instance will get destroyed.
         """
-        cmd_line, fds = fdsend.recvfds(
-            self._socket, self.MAX_MSG_SIZE, numfds=self.MAX_NUM_FDS
+        cmd_line, fds = fdsend.recv_fds(
+            self._socket, self.MAX_MSG_SIZE, maxfds=self.MAX_NUM_FDS
         )
 
         # By wrapping the files in objects, they will be implicitly closed
