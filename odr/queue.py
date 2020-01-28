@@ -18,7 +18,7 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 
-class StateQueue(object):
+class StateQueue:
     """Manages a simple FIFO state queue with an idle state in case the queue is
     empty.
     """

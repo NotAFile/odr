@@ -30,7 +30,7 @@ from odr.timeoutmgr import TimeoutManager, TimeoutObject
 from pydhcplib.dhcp_packet import DhcpPacket
 
 
-class DhcpAddressRequest(object):
+class DhcpAddressRequest:
     """Represents the request for an IP address (and additional settings
     relevant for the target network) based on a MAC address.
 
@@ -451,8 +451,7 @@ class DhcpAddressRequestor(ListeningSocket):
         self._log = logging.getLogger('dhcpaddrrequestor')
         self._requests = {}  # type: Dict[int, DhcpAddressRequest]
 
-        super(DhcpAddressRequestor, self).__init__(listen_address,
-                listen_port, listen_device)
+        super().__init__(listen_address, listen_port, listen_device)
 
         self._log.debug('listening on %s:%d@%s for DHCP responses' % (
                 self.listen_address, self.listen_port, self.listen_device))
@@ -493,19 +492,19 @@ class DhcpAddressRequestor(ListeningSocket):
 
             dhcp_type = packet.GetOption("dhcp_message_type")[0]
             if dhcp_type not in self._DHCP_TYPE_HANDLERS:
-                self._log.debug("Ignoring packet of unexpected DHCP type %d" % \
+                self._log.debug("Ignoring packet of unexpected DHCP type %d",
                         dhcp_type)
                 return
 
             xid = int.from_bytes(packet.GetOption('xid'), "big")
             if xid not in self._requests:
-                self._log.debug("Ignoring answer with xid %s" % repr(xid))
+                self._log.debug("Ignoring answer with xid %r", xid)
                 return
 
             request = self._requests[xid]
             clb_name = self._DHCP_TYPE_HANDLERS[dhcp_type]
             if not hasattr(request, clb_name):
-                self._log.error("request has no callback '%s'" % clb_name)
+                self._log.error("request has no callback '%s'", clb_name)
                 return
 
             clb = getattr(request, clb_name)
@@ -518,7 +517,7 @@ class DhcpAddressRequestor(ListeningSocket):
         self.socket.sendto(data, (dest_ip, dest_port))
 
 
-class DhcpAddressRequestorManager(object):
+class DhcpAddressRequestorManager:
     """Holds a list of all available requestors.  Not much more than a
     dictionary with added error detection.
     """
@@ -533,8 +532,8 @@ class DhcpAddressRequestorManager(object):
         """
         listen_pair = (requestor.listen_device, requestor.listen_address)
         if listen_pair in self._requestors_by_device_and_ip:
-            self._log.error('attempt to listen on IP %s@%s multiple times' % (
-                    requestor.listen_address, requestor.listen_device))
+            self._log.error('attempt to listen on IP %s@%s multiple times',
+                    requestor.listen_address, requestor.listen_device)
             return
         self._requestors_by_device_and_ip[listen_pair] = requestor
 
@@ -550,8 +549,8 @@ class DhcpAddressRequestorManager(object):
         """
         listen_pair = (device, local_ip)
         if listen_pair not in self._requestors_by_device_and_ip:
-            self._log.error('request for unsupported local IP %s@%s' % (
-                    local_ip, device))
+            self._log.error('request for unsupported local IP %s@%s',
+                    local_ip, device)
             return None
         return self._requestors_by_device_and_ip[listen_pair]
 

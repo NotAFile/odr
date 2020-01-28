@@ -18,7 +18,7 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 
-class LineSocket(object):
+class LineSocket:
     """The LineSocket class wraps around a regular socket object.  Instead of
     byte blobs, the class allows lines to be received.
     """

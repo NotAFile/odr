@@ -21,7 +21,7 @@ import time
 
 from typing import Callable, List
 
-class TimeoutObject(object):
+class TimeoutObject:
     def __init__(self, timeout_time: float, timeout_func: Callable[[], None]) -> None:
         self.timeout_time = timeout_time
         self._timeout_func = timeout_func
@@ -30,10 +30,10 @@ class TimeoutObject(object):
         self._timeout_func()
 
     def __repr__(self) -> str:
-        return "<%s wrapping %s>" % (self.__class__, repr(self._timeout_func))
+        return "<{} wrapping {!r}>".format(self.__class__, self._timeout_func)
 
 
-class TimeoutManager(object):
+class TimeoutManager:
     """The TimeoutManager keeps track of objects that have a timeout time set.
     As soon as a timeout occurs, the affected objects are notified.
 

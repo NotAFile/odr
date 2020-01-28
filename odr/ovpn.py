@@ -65,7 +65,7 @@ def determine_daemon_name(script_name) -> Optional[str]:
     return None
 
 
-class OvpnClientConnData(object):
+class OvpnClientConnData:
     """Represents a single client connection within an OpenVPN server's client
     list.
     """
@@ -76,13 +76,13 @@ class OvpnClientConnData(object):
         self.server = kwargs.get('server', None)
 
     def __str__(self):
-        return '%s on %s' % (self.common_name, self.server)
+        return '{} on {}'.format(self.common_name, self.server)
 
     def __repr__(self):
         return "<OvpnClientConnData common_name=%s, ...>" % self.common_name
 
 
-class OvpnServer(object):
+class OvpnServer:
     """Represents a single OpenVPN server and allows communication with the
     server (via the management console).
     """
@@ -120,8 +120,8 @@ class OvpnServer(object):
             sock.close()
             return
 
-        self.log.debug('connected to OpenVPN server "%s" at "%s"' % (
-                self.name, self._socket_fn))
+        self.log.debug('connected to OpenVPN server "%s" at "%s"',
+                self.name, self._socket_fn)
         self._socket = LineSocket(sock)
         self._sloop.add_socket_handler(self)
 
@@ -135,11 +135,11 @@ class OvpnServer(object):
 
     def _on_connected(self, hello_msg):
         if not hello_msg.decode().startswith('>INFO:'):
-            self.log.error('connection to OpenVPN server "%s" failed: "%s"' % (
-                    self.name, hello_msg))
+            self.log.error('connection to OpenVPN server "%s" failed: "%s"',
+                    self.name, hello_msg)
             self.close_mgmt()
             return
-        self.log.debug('connected to OpenVPN server "%s"' % self.name)
+        self.log.debug('connected to OpenVPN server "%s"', self.name)
 
     def __del__(self):
         if self.connected:
@@ -172,7 +172,7 @@ class OvpnServer(object):
         lines = self._socket.recvlines()
         if lines is None:
             # EOF - clean-up.
-            self.log.error('received EOF on socket for OpenVPN server "%s"' % \
+            self.log.error('received EOF on socket for OpenVPN server "%s"',
                     self.name)
             self.close_mgmt()
             return
@@ -224,7 +224,7 @@ class OvpnServer(object):
         self._cmd_state.add(_OvpnListClientsState(self, list_done_clb))
 
 
-class _OvpnIdleState(object):
+class _OvpnIdleState:
     """The default state of the management console.  Takes all lines, ignores
     them and wants to continue forever.
     """
@@ -232,7 +232,7 @@ class _OvpnIdleState(object):
         return True
 
 
-class _OvpnWaitConnectState(object):
+class _OvpnWaitConnectState:
     """Waits for an OpenVPN management socket to to connect.
     """
     def __init__(self, done_clb):
@@ -243,7 +243,7 @@ class _OvpnWaitConnectState(object):
         return False
 
 
-class _OvpnListClientsState(object):
+class _OvpnListClientsState:
     """Uses an OpenVPN management socket to asynchronously request the client
     list.
     """
@@ -274,7 +274,7 @@ class _OvpnListClientsState(object):
         return True
 
 
-class _OvpnDisconnectClientsState(object):
+class _OvpnDisconnectClientsState:
     """Uses an OpenVPN management socket to asynchronously disconnect a client.
     """
 
@@ -292,7 +292,7 @@ class _OvpnDisconnectClientsState(object):
         return True
 
 
-class OvpnServerSupervisor(object):
+class OvpnServerSupervisor:
     """Makes sure the associated OpenVPN server has an active management
     connection.
     """

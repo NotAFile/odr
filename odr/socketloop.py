@@ -21,7 +21,7 @@ import select
 import logging
 
 
-class SocketLoop(object):
+class SocketLoop:
     """Maintains a list of socket handlers.  Each handler may have a single
     socket.  Waits for activity on all known sockets and in case of activity for
     a certain socket, calls the socket's handler.

@@ -34,7 +34,7 @@ class SocketLocalAddressNotAvailable(SocketLocalAddressBindFailed):
     """
 
 
-class ListeningSocket(object):
+class ListeningSocket:
     """A ListeningSocket represents a UDP socket listening for packets
     on a specific IP address and port on a specific network device, if
     desired.

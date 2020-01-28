@@ -125,7 +125,7 @@ class CommandConnection:
         raise NotImplementedError('Method handle_cmd not implemented')
 
 
-class CommandConnectionListener(object):
+class CommandConnectionListener:
     """Listens on a POSIX Local IPC Socket (AKA Unix domain socket) and uses a
     factory function to create an instance that takes care of each new socket
     connection.
@@ -178,7 +178,7 @@ class CommandConnectionListener(object):
         """
         try:
             sock, _ = self._socket.accept()
-        except IOError as e:
+        except OSError as e:
             print("Received exception %s while accepting new cmd conn" % repr(e))
             return
         self._log.debug('received a new connection')
