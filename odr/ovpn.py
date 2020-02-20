@@ -115,7 +115,7 @@ class OvpnServer:
         sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
         try:
             sock.connect(self._socket_fn)
-        except ConnectionError as e:
+        except OSError as e:
             self.log.error('connection to OpenVPN server "%s" failed: %s', self.name, e)
             sock.close()
             return
