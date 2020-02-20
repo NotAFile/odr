@@ -64,6 +64,8 @@ def main():
         )
 
         data = sock.recv(1024)
+        if not data:
+            raise RuntimeError('no response from odr')
 
         status = json.loads(data.decode("utf-8"))["cmd"]
         if status != 'OK':

@@ -80,7 +80,7 @@ class CommandConnection:
         In case of EOF, the socket will be removed from the socket loop and this
         instance will get destroyed.
         """
-        cmd_line, fds = fdsend.recv_fds(
+        cmd_line, fds, _, _ = fdsend.recv_fds(
             self._socket, self.MAX_MSG_SIZE, maxfds=self.MAX_NUM_FDS
         )
 
