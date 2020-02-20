@@ -215,7 +215,6 @@ class OvpnClient:
                 client_identifier=self.full_username,
                 device=self._realm_data.dhcp_listening_device,
                 local_ip=self._realm_data.dhcp_listening_ip,
-                local_port=self._realm_data.dhcp_local_port,
                 server_ips=self._realm_data.dhcp_server_ips,
                 client_ip=self._leased_ip_address,
                 lease_time=self._realm_data.expected_dhcp_lease_time,
@@ -736,7 +735,6 @@ class OvpnCmdConn(CommandConnection):
                 client_identifier=self._full_username,
                 device=realm_data.dhcp_listening_device,
                 local_ip=realm_data.dhcp_listening_ip,
-                local_port=realm_data.dhcp_local_port,
                 server_ips=realm_data.dhcp_server_ips,
                 lease_time=realm_data.expected_dhcp_lease_time,
             )
