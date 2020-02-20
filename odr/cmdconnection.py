@@ -94,19 +94,17 @@ class CommandConnection:
             self._log.debug('closing cmd socket due to EOF')
             self._sloop.del_socket_handler(self)
 
-    def send_cmd(self, cmd, params={}, files=None):
+    def send_cmd(self, cmd, params={}):
         """Used to send responses back to the client.  Sends the specified
         command as a single message.
 
         :ivar cmd: Command to send. Should not contain a new-line or a zero
                 character.
-        :ivar params: Parameters to send. Should not contain a new-line or a
-                zero character.  (Optional.)
-        :ivar files: File handles to send.  (Optional.)
+        :ivar params: Parameters to send. (Optional.)
         """
         result = {"cmd": cmd}
         result.update(params)
-        fdsend.sendfds(self._socket, json.dumps(result).encode("utf-8"), fds=files)
+        self._socket.send(json.dumps(result).encode("utf-8"))
 
     def handle_command(self, cmd):
         """The handle_command function is called as soon as a command was

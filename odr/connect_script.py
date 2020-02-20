@@ -57,13 +57,13 @@ def main():
     try:
         result = {"cmd": "request"}
         result.update(params)
-        fdsend.send_fds(sock, json.dumps(result).encode("utf-8"), fds=[ret_f, cfg_f])
+        fdsend.send_fds(sock, [json.dumps(result).encode("utf-8")], fds=[ret_f, cfg_f])
 
-        ret, _ = sock.recv(1024)
+        data = sock.recv(1024)
 
-        status = json.loads(ret.decode("utf-8"))["cmd"]
+        status = json.loads(data.decode("utf-8"))["cmd"]
         if status != 'OK':
-            raise RuntimeError('starting dhcp request failed (ret: "%s")' % ret)
+            raise RuntimeError('starting dhcp request failed (ret: "%s")' % data)
     except Exception:
         ovpn.write_deferred_ret_file(ret_f, ovpn.CC_RET_FAILED)
         raise

@@ -48,7 +48,7 @@ def main():
     result = {"cmd": "disconnect"}
     result.update(params)
     sock.send(json.dumps(result).encode("utf-8"))
-    ret, _ = sock.recv(1024)
+    ret = sock.recv(1024)
     status = json.loads(ret.decode("utf-8"))["cmd"]
     if status != 'OK':
         raise RuntimeError('sending disconnect notification failed (ret: "%s")' % ret)
