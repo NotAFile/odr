@@ -57,7 +57,11 @@ def main():
     try:
         result = {"cmd": "request"}
         result.update(params)
-        fdsend.send_fds(sock, [json.dumps(result).encode("utf-8")], fds=[ret_f, cfg_f])
+        fdsend.send_fds(
+            sock,
+            [json.dumps(result).encode("utf-8")],
+            fds=[ret_f.fileno(), cfg_f.fileno()],
+        )
 
         data = sock.recv(1024)
 
