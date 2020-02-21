@@ -292,7 +292,7 @@ class _OvpnDisconnectClientsState:
 
     def __init__(self, ovpn, common_name, done_clb) -> None:
         self._done = done_clb
-        ovpn._send_cmd(b'kill %s' % common_name)
+        ovpn._send_cmd(b'kill "%s"' % common_name.encode("ascii"))
 
     def handle_line(self, line) -> bool:
         if line.startswith('SUCCESS:'):
