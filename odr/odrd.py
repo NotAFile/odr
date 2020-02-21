@@ -45,6 +45,7 @@ from odr.socketloop import SocketLoop
 import odr.dhcprequestor
 import odr.listeningsocket
 from odr.weakmethod import WeakBoundMethod
+from odr.ovpn_config import OvpnConf
 
 
 CONFIG_FILE = '/etc/odr.conf'
@@ -564,12 +565,11 @@ class OvpnCmdConn(CommandConnection):
 
         self._log.debug('writing OpenVPN client configuration')
         assert self._config_f is not None and self._realm_data is not None
-        self._config_f.seek(0)
 
-        self._config_f.write(
-            'ifconfig-push {} {}\n'.format(res['ip_address'], res['subnet_mask'])
-        )
-        self._config_f.write('push "ip-win32 dynamic"\n')
+        conf = OvpnConf()
+
+        conf.add("ifconfig-push", res["ip_address"], res["subnet_mask"])
+        conf.push("ip-win32", "dynamic")
 
         if self._realm_data.subnet_ipv6 is not None:
             prefix = self._realm_data.subnet_ipv6
@@ -586,19 +586,15 @@ class OvpnCmdConn(CommandConnection):
             else:
                 ip6_gateway = str(ipv6_network + 1)
 
-            self._config_f.write(
-                'ifconfig-ipv6-push {} {}\n'.format(ip6_address, ip6_gateway)
-            )
+            conf.add("ifconfig-ipv6-push", ip6_address, ip6_gateway)
 
         if self._realm_data.vid is not None:
-            self._config_f.write('vlan-pvid %d\n' % self._realm_data.vid)
+            conf.add("vlan-pvid", str(self._realm_data.vid))
 
         if self._realm_data.default_gateway_ipv4 is not None:
-            self._config_f.write(
-                'push "route-gateway %s"\n' % (self._realm_data.default_gateway_ipv4)
-            )
+            conf.push("route-gateway", self._realm_data.default_gateway_ipv4)
         elif 'gateway' in res:
-            self._config_f.write('push "route-gateway %s"\n' % (res['gateway']))
+            conf.push("route-gateway", res['gateway'])
         else:
             self._log.debug(
                 'DHCP request provided no gateway information: %s' % (repr(res))
@@ -606,10 +602,10 @@ class OvpnCmdConn(CommandConnection):
 
         if self._realm_data.provide_default_route:
             if self._realm_data.default_gateway_ipv6 is not None:
-                self._config_f.write('push "route-ipv6 2000::/3"\n')
-                self._config_f.write('push "redirect-gateway def1"\n')
+                conf.push("route-ipv6", "2000::/3")
+                conf.push("redirect-gateway", "def1")
             elif 'gateway' in res or self._realm_data.default_gateway_ipv4 is not None:
-                self._config_f.write('push "redirect-gateway def1"\n')
+                conf.push("redirect-gateway", "def1")
         else:
             static_routes_ipv4 = []  # type: List[str]
             if self._realm_data.static_routes_ipv4 is not None:
@@ -618,9 +614,7 @@ class OvpnCmdConn(CommandConnection):
                 static_routes_ipv4 += res['static_routes']
             if len(static_routes_ipv4) > 0:
                 for network, netmask, gateway in static_routes_ipv4:
-                    self._config_f.write(
-                        'push "route {} {} {}"\n'.format(network, netmask, gateway)
-                    )
+                    conf.push("route", network, netmask, gateway)
 
             static_routes_ipv6 = []  # type: List[str]
             if (
@@ -629,17 +623,18 @@ class OvpnCmdConn(CommandConnection):
             ):
                 static_routes_ipv6 += self._realm_data.static_routes_ipv6
             for network, gateway in static_routes_ipv6:
-                self._config_f.write(
-                    'push "route-ipv6 {} {}"\n'.format(network, gateway)
-                )
+                conf.push("route-ipv6", network, gateway)
 
-        self._config_f.write('push "redirect-private"\n')
+        conf.push("redirect-private")
 
         for dns_ip in res['dns']:
-            self._config_f.write('push "dhcp-option DNS %s"\n' % dns_ip)
-        if 'domain' in res:
-            self._config_f.write('push "dhcp-option DOMAIN %s"\n' % res['domain'])
+            conf.push_dhcp_option("DNS", dns_ip)
 
+        if 'domain' in res:
+            conf.push_dhcp_option("DOMAIN", res["domain"])
+
+        self._config_f.seek(0)
+        self._config_f.write(conf.to_text())
         self._config_f.flush()
         os.fsync(self._config_f.fileno())
 
