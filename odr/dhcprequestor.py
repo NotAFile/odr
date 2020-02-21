@@ -131,6 +131,7 @@ class DhcpAddressRequest:
     def _generate_base_packet(self) -> DhcpPacket:
         packet = DhcpPacket()
         packet.AddLine("op: BOOTREQUEST")
+        packet.AddLine("htype: 1")
         packet.SetOption("xid", self._xid.to_bytes(4, "big"))
 
         # We're the gateway.
