@@ -135,7 +135,7 @@ class OvpnServer:
         self._cmd_state.clear()
 
     def _on_connected(self, hello_msg):
-        if not hello_msg.decode().startswith('>INFO:'):
+        if not hello_msg.startswith(b'>INFO:'):
             self.log.error(
                 'connection to OpenVPN server "%s" failed: "%s"', self.name, hello_msg
             )
@@ -278,7 +278,7 @@ class _OvpnListClientsState:
         self._clients.append(cl)
 
     def handle_line(self, line):
-        if line.decode().startswith('CLIENT_LIST,'):
+        if line.startswith(b'CLIENT_LIST,'):
             self._parse_client_line(line)
         elif line == b'END\n':
             self._list_done(self._clients)
@@ -295,10 +295,10 @@ class _OvpnDisconnectClientsState:
         ovpn._send_cmd(b'kill "%s"' % common_name.encode("ascii"))
 
     def handle_line(self, line) -> bool:
-        if line.startswith('SUCCESS:'):
+        if line.startswith(b'SUCCESS:'):
             self._done(True)
             return False
-        elif line.startswith('ERROR:'):
+        elif line.startswith(b'ERROR:'):
             self._done(False)
             return False
         return True
