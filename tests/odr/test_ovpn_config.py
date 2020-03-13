@@ -1,4 +1,4 @@
-from odr.ovpn_config import OvpnClientConf, config_escape
+from odr.ovpn_config import OvpnConf, config_escape
 
 def test_config_escape():
     # unchanged
@@ -13,7 +13,7 @@ def test_config_escape():
 
 
 def test_simple_conf():
-    conf = OvpnClientConf()
+    conf = OvpnConf()
     conf.add("test", "1", "2")
     conf.push("test", "1", "2")
     expected = 'test 1 2\npush "test 1 2"'
