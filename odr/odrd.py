@@ -17,38 +17,39 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-import sys
+import datetime
+import grp
+import hashlib
 import logging
-import weakref
-import re
 import os
 import pwd
-import grp
-import time
-import signal
-import prctl
-import socket
 import random
-from optparse import OptionParser
+import re
+import signal
+import socket
+import sys
+import time
+import weakref
 from configparser import ConfigParser
 from functools import partial
-import datetime
-import hashlib
-from ipaddress import IPv6Network, IPv4Network
+from ipaddress import IPv4Network, IPv6Network
+from optparse import OptionParser
+from typing import Any, Dict, Iterator, List, Optional, TextIO, Tuple
 
-from typing import Dict, Optional, Any, List, Tuple, Iterator, TextIO
+import prctl
 
-import odr.ovpn as ovpn
-from odr.cmdconnection import CommandConnection, CommandConnectionListener
-from odr.timeoutmgr import TimeoutManager, TimeoutObject
-from odr.socketloop import SocketLoop
 import odr.dhcprequestor
 import odr.listeningsocket
-from odr.weakmethod import WeakBoundMethod
-from odr.ovpn_config import OvpnConf
-from .parse import ParseUsername
-from .config import parse_static_routes_ipv4, parse_static_routes_ipv6, cfg_iterate, split_cfg_list
+import odr.ovpn as ovpn
 
+from .cmdconnection import CommandConnection, CommandConnectionListener
+from .config import (cfg_iterate, parse_static_routes_ipv4,
+                     parse_static_routes_ipv6, split_cfg_list)
+from .ovpn_config import OvpnConf
+from .parse import ParseUsername
+from .socketloop import SocketLoop
+from .timeoutmgr import TimeoutManager, TimeoutObject
+from .weakmethod import WeakBoundMethod
 
 CONFIG_FILE = '/etc/odr.conf'
 
