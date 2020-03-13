@@ -46,53 +46,11 @@ import odr.dhcprequestor
 import odr.listeningsocket
 from odr.weakmethod import WeakBoundMethod
 from odr.ovpn_config import OvpnConf
+from .parse import ParseUsername
+from .config import parse_static_routes_ipv4, parse_static_routes_ipv6, cfg_iterate, split_cfg_list
 
 
 CONFIG_FILE = '/etc/odr.conf'
-
-
-class ParseUsername:
-    """Provides parsing of full usernames into their components.
-    """
-
-    USERNAME_RE = re.compile(
-        r'^(?P<username>[^/@]+)(/(?P<resource>[^/@]+))?'
-        r'(@((?P<domain>[^/@]+)/)?(?P<realm>[^/@]+))?$'
-    )
-
-    def __init__(self, default_realm: str) -> None:
-        self._default_realm = default_realm
-        self._log = logging.getLogger('parseusername')
-
-    def parse_username(self, full_username: str) -> Optional[Dict[str, str]]:
-        """Parse a full username into its components and apply any defaulting
-        rules for the components.
-
-        @param full_username: The full username to parse.
-        @return: Returns a dictionary of the username components, consisting of
-            "username", "resource", "domain" and "realm".
-        """
-        match = self.USERNAME_RE.match(full_username)
-        if match is None:
-            self._log.warning('username in unexpected format: "%s"', full_username)
-            return None
-        realm = match.group('realm')
-
-        if realm is None:
-            if self._default_realm is None:
-                self._log.warning('username contains no realm: "%s"', full_username)
-                return None
-            self._log.debug(
-                'no realm specified, using default realm "%s"', self._default_realm
-            )
-            realm = self._default_realm
-
-        return {
-            'username': match.group('username'),
-            'resource': match.group('resource'),
-            'domain': match.group('domain'),
-            'realm': realm,
-        }
 
 
 class RealmData:
@@ -755,64 +713,6 @@ class OvpnCmdConn(CommandConnection):
 
         self.send_cmd('OK')
         self._remove_client(full_username, server)
-
-
-def cfg_get_def(cfg, sect, opt, default=None) -> str:
-    """Small helper to allow configuration options with program-defined
-    defaults.
-    """
-    if cfg.has_option(sect, opt):
-        return cfg.get(sect, opt)
-    else:
-        return default
-
-
-def cfg_getint_def(cfg, sect, opt, default=None) -> int:
-    """Small helper to allow configuration options with program-defined
-    defaults.
-    """
-    if cfg.has_option(sect, opt):
-        return cfg.getint(sect, opt)
-    else:
-        return default
-
-
-def cfg_getboolean_def(cfg, sect, opt, default=None) -> bool:
-    """Small helper to allow configuration options with program-defined
-    defaults.
-    """
-    if cfg.has_option(sect, opt):
-        return cfg.getboolean(sect, opt)
-    else:
-        return default
-
-
-def split_cfg_list(val, split=',') -> List[str]:
-    """Split a string along "split" characters - ignoring any spaces
-    surrounding the split characters.
-    @param val: The string to split at the split characters.
-    @param split: Optional split characters to use for splitting.  Defaults to
-        ",".
-    @return: Returns a list of strings.
-    """
-    return [v.strip() for v in val.split(split) if (len(v.strip()) > 0)]
-
-
-def cfg_iterate(cfg, section_type) -> Iterator[Tuple[str, str]]:
-    """Iterate over all config sections who's section names are prefixed with
-    the specified section type.
-    @param cfg: Config object to read the sections from.
-    @param section_type: Section type name that acts as the prefix for all
-        relevant section names.
-    @return: Returns a tuple of section name and element part of the name
-        (without the section type prefix).
-    """
-    sec_start = '%s ' % section_type
-    for sect_name in [s for s in cfg.sections() if s.startswith(sec_start)]:
-        elem_name = sect_name[len(sec_start) :]
-        yield (sect_name, elem_name)
-
-
 def user_to_uid(user) -> int:
     """Transforms a user to a UID.  In case the user is already a UID, the
     UID is passed through unchanged.
@@ -866,42 +766,11 @@ def get_ip_for_iface(iface) -> str:
     return addrs[netifaces.AF_INET][0]['addr']
 
 
-def parse_static_routes_ipv4(data) -> List[Tuple[str, str, str]]:
-    """Parses a string of the form
-      0.0.0.0/0 via 10.0.98.120, 10.0.97.0/24 via 10.0.98.121
-    @return: Returns a list of network, netmask and gateway tuples.
-    """
-    static_routes = []
-    for static_route_str in split_cfg_list(data):
-        network_str, via, gateway = split_cfg_list(static_route_str, split=' ')
-        if via != 'via':
-            raise RuntimeError('Invalid static route format: "%s' % static_route_str)
-        network = IPv4Network(network_str)
-        static_routes.append(
-            (str(network.network_address), str(network.netmask), gateway)
-        )
-    return static_routes
-
-
-def parse_static_routes_ipv6(data: str) -> List[Tuple[str, str]]:
-    """Parses a string of the form
-      ::/0 via fd00::1, fd01:1234::/64 via fd00::1
-    @return: Returns a list of prefix and gateway tuples.
-    """
-    static_routes = []
-    for static_route_str in split_cfg_list(data):
-        network, via, gateway = split_cfg_list(static_route_str, split=' ')
-        if via != 'via':
-            raise RuntimeError('Invalid static route format: "%s' % static_route_str)
-        static_routes.append((network, gateway))
-    return static_routes
-
-
-def process_realm(cfg, realm_name, realms, delayed_realms) -> None:
+def process_realm(cfg: ConfigParser, realm_name, realms, delayed_realms) -> None:
     sect = 'realm %s' % realm_name
 
     logging.debug('processing realm "%s"', realm_name)
-    parent_realm_name = cfg_get_def(cfg, sect, 'include_realm')
+    parent_realm_name = cfg.get(sect, 'include_realm')
     if parent_realm_name is not None:
         # Is the realm we depend on already loaded?
         if parent_realm_name not in realms:
@@ -919,10 +788,10 @@ def process_realm(cfg, realm_name, realms, delayed_realms) -> None:
 
     realms[realm_name] = realm_data
 
-    realm_data.vid = cfg_getint_def(cfg, sect, 'vid', realm_data.vid)
+    realm_data.vid = cfg.getint(sect, 'vid', fallback=realm_data.vid)
 
-    realm_data.dhcp_local_port = cfg_getint_def(
-        cfg, sect, 'dhcp_local_port', realm_data.dhcp_local_port
+    realm_data.dhcp_local_port = cfg.getint(
+        sect, 'dhcp_local_port', fallback=realm_data.dhcp_local_port
     )
 
     if cfg.has_option(sect, 'dhcp_listening_device'):
@@ -931,24 +800,24 @@ def process_realm(cfg, realm_name, realms, delayed_realms) -> None:
         # set too (or the implicit detection needs to be performed again).
         realm_data.dhcp_listening_ip = None
 
-    realm_data.dhcp_listening_ip = cfg_get_def(
-        cfg, sect, 'dhcp_listening_ip', realm_data.dhcp_listening_ip
+    realm_data.dhcp_listening_ip = cfg.get(
+        sect, 'dhcp_listening_ip', fallback=realm_data.dhcp_listening_ip
     )
 
-    realm_data.provide_default_route = cfg_getboolean_def(
-        cfg, sect, 'provide_default_route', realm_data.provide_default_route
+    realm_data.provide_default_route = cfg.getboolean(
+        sect, 'provide_default_route', fallback=realm_data.provide_default_route
     )
 
-    realm_data.default_gateway_ipv4 = cfg_get_def(
-        cfg, sect, 'default_gateway_ipv4', realm_data.default_gateway_ipv4
+    realm_data.default_gateway_ipv4 = cfg.get(
+        sect, 'default_gateway_ipv4', fallback=realm_data.default_gateway_ipv4
     )
 
-    realm_data.subnet_ipv6 = cfg_get_def(
-        cfg, sect, 'subnet_ipv6', realm_data.subnet_ipv6
+    realm_data.subnet_ipv6 = cfg.get(
+        sect, 'subnet_ipv6', fallback=realm_data.subnet_ipv6
     )
 
-    realm_data.default_gateway_ipv6 = cfg_get_def(
-        cfg, sect, 'default_gateway_ipv6', realm_data.default_gateway_ipv6
+    realm_data.default_gateway_ipv6 = cfg.get(
+        sect, 'default_gateway_ipv6', fallback=realm_data.default_gateway_ipv6
     )
 
     if cfg.has_option(sect, 'static_routes_ipv4'):
@@ -977,8 +846,8 @@ def process_realm(cfg, realm_name, realms, delayed_realms) -> None:
             for i in cfg.get(sect, 'dhcp_server_ips').split(',')
         ]
 
-    realm_data.expected_dhcp_lease_time = cfg_getint_def(
-        cfg, sect, 'expected_dhcp_lease_time', realm_data.expected_dhcp_lease_time
+    realm_data.expected_dhcp_lease_time = cfg.getint(
+        sect, 'expected_dhcp_lease_time', fallback=realm_data.expected_dhcp_lease_time
     )
 
 
@@ -1052,7 +921,7 @@ def drop_caps(user=None, group=None, caps=None) -> None:
     prctl.cap_inheritable.limit()
 
 
-def read_servers(cfg, sloop) -> Dict[str, ovpn.OvpnServer]:
+def read_servers(cfg: ConfigParser, sloop) -> Dict[str, ovpn.OvpnServer]:
     """Read all servers from the configuration file and connect to each of
     them.
     """
@@ -1152,14 +1021,14 @@ def main() -> None:
     loglevel = logging.INFO
     if options.debug:
         loglevel = logging.DEBUG
-    setup_logging(loglevel, cfg_getboolean_def(cfg, 'daemon', 'syslog', False))
+    setup_logging(loglevel, cfg.getboolean('daemon', 'syslog', fallback=False))
 
     if not options.keep_user:
         # Capability net_raw is needed for binding to network devices.
         # Capability net_bind_service is needed for binding to the DHCP port.
         drop_caps(
-            user=cfg_get_def(cfg, 'daemon', 'user', None),
-            group=cfg_get_def(cfg, 'daemon', 'group', None),
+            user=cfg.get('daemon', 'user', fallback=None),
+            group=cfg.get('daemon', 'group', fallback=None),
             caps=['net_raw', 'net_bind_service'],
         )
 
@@ -1217,7 +1086,7 @@ def main() -> None:
         requestor.add_request(request)
 
     parse_username = ParseUsername(
-        default_realm=cfg_get_def(cfg, 'daemon', 'default_realm')
+        default_realm=cfg.get('daemon', 'default_realm')
     )
 
     client_mgr = OvpnClientManager(
@@ -1234,7 +1103,7 @@ def main() -> None:
             sock,
             realms_data=realms_data,
             servers=servers,
-            secret=cfg_get_def(cfg, 'daemon', 'secret', None),
+            secret=cfg.get('daemon', 'secret', fallback=None),
             create_client_clb=client_mgr.create_client,
             remove_client_clb=client_mgr.client_disconnected,
             add_request_clb=start_dhcp_address_request,
@@ -1243,11 +1112,11 @@ def main() -> None:
 
     cmd_socket_uids = [
         user_to_uid(user)
-        for user in split_cfg_list(cfg_get_def(cfg, 'daemon', 'cmd_socket_uids', ''))
+        for user in split_cfg_list(cfg.get('daemon', 'cmd_socket_uids', fallback=''))
     ]
     cmd_socket_gids = [
         group_to_gid(group)
-        for group in split_cfg_list(cfg_get_def(cfg, 'daemon', 'cmd_socket_gids', ''))
+        for group in split_cfg_list(cfg.get('daemon', 'cmd_socket_gids', fallback=''))
     ]
 
     def cmd_conn_auth_check(sock, pid, uid, gid) -> bool:
@@ -1257,8 +1126,8 @@ def main() -> None:
             return True
         return False
 
-    cmd_socket_perms = int(cfg_get_def(cfg, 'daemon', 'cmd_socket_perms', '0666'), 8)
-    for unix_socket_fn in split_cfg_list(cfg_get_def(cfg, 'daemon', 'cmd_sockets', '')):
+    cmd_socket_perms = int(cfg.get('daemon', 'cmd_socket_perms', fallback='0666'), 8)
+    for unix_socket_fn in split_cfg_list(cfg.get('daemon', 'cmd_sockets', fallback='')):
         cmd_listener = CommandConnectionListener(
             sloop=weakref.proxy(sloop),
             socket_path=unix_socket_fn,
