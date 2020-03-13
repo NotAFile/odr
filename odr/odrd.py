@@ -38,6 +38,8 @@ from typing import Any, Dict, Iterator, List, Optional, TextIO, Tuple
 
 import prctl
 
+from prometheus_client import start_http_server, Gauge, Counter
+
 import odr.dhcprequestor
 import odr.listeningsocket
 import odr.ovpn as ovpn
@@ -431,6 +433,7 @@ class OvpnClientManager:
             lease_timeout=None,
         )
 
+M_DHCP_REQUEST_SUCCESS_COUNT = Counter("dhcp_request_success_count", "number of successful dhcp requests", ("realm",))
 
 class OvpnCmdConn(CommandConnection):
     """Represents an incoming command connection from one of the OpenVPN
@@ -524,6 +527,8 @@ class OvpnCmdConn(CommandConnection):
 
         self._log.debug('writing OpenVPN client configuration')
         assert self._config_f is not None and self._realm_data is not None
+
+        M_DHCP_REQUEST_SUCCESS_COUNT.labels(self._realm_data.name).inc()
 
         conf = OvpnConf()
 
@@ -1023,6 +1028,11 @@ def main() -> None:
     if options.debug:
         loglevel = logging.DEBUG
     setup_logging(loglevel, cfg.getboolean('daemon', 'syslog', fallback=False))
+
+    prom_port = cfg.getint("daemon", "prometheus_port", fallback=0)
+    if prom_port:
+        logging.debug("starting prometheus exporter on port %s", prom_port)
+        start_http_server(prom_port)
 
     if not options.keep_user:
         # Capability net_raw is needed for binding to network devices.
