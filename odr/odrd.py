@@ -776,7 +776,7 @@ def process_realm(cfg: ConfigParser, realm_name, realms, delayed_realms) -> None
     sect = 'realm %s' % realm_name
 
     logging.debug('processing realm "%s"', realm_name)
-    parent_realm_name = cfg.get(sect, 'include_realm')
+    parent_realm_name = cfg.get(sect, 'include_realm', fallback=None)
     if parent_realm_name is not None:
         # Is the realm we depend on already loaded?
         if parent_realm_name not in realms:
