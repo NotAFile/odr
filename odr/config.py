@@ -1,6 +1,7 @@
 """helpers for reading the odr config"""
 from typing import Dict, Optional, Any, List, Tuple, Iterator, TextIO
 
+from ipaddress import IPv4Network
 
 def split_cfg_list(val: str, split=",") -> List[str]:
     """Split a string along "split" characters - ignoring any spaces
