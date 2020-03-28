@@ -19,7 +19,7 @@ class RealmData:
     The attributes are injected at configuration-load-time.
     """
 
-    def __init__(self, name, parent: RealmData = None) -> None:
+    def __init__(self, name, parent: "RealmData" = None) -> None:
         self.name = name
         if parent is not None:
             self.vid = parent.vid
@@ -102,7 +102,7 @@ def process_realm(
         'dhcp_local_port', fallback=realm_data.dhcp_local_port
     )
 
-    if cfg.has_option('dhcp_listening_device'):
+    if 'dhcp_listening_device' in cfg:
         realm_data.dhcp_listening_device = cfg.get('dhcp_listening_device')
         # If a device is explicitly set, the listening IP needs to be explicitly
         # set too (or the implicit detection needs to be performed again).
@@ -128,12 +128,12 @@ def process_realm(
         'default_gateway_ipv6', fallback=realm_data.default_gateway_ipv6
     )
 
-    if cfg.has_option('static_routes_ipv4'):
+    if 'static_routes_ipv4' in cfg:
         realm_data.static_routes_ipv4 = parse_static_routes_ipv4(
             cfg.get('static_routes_ipv4')
         )
 
-    if cfg.has_option('static_routes_ipv6'):
+    if 'static_routes_ipv6' in cfg:
         realm_data.static_routes_ipv6 = parse_static_routes_ipv6(
             cfg.get('static_routes_ipv6')
         )
@@ -148,7 +148,7 @@ def process_realm(
             realm_data.dhcp_listening_device
         )
 
-    if cfg.has_option('dhcp_server_ips'):
+    if 'dhcp_server_ips' in cfg:
         realm_data.dhcp_server_ips = [
             socket.gethostbyname(i.strip())
             for i in cfg.get('dhcp_server_ips').split(',')
@@ -172,7 +172,7 @@ def read_realms(cfg: ConfigParser, default_dhcp_device = None) -> Optional[Dict[
         sect = 'realm ' + realm_name
 
         # this is the least ugly way to do this, sadly
-        if default_dhcp_device and not cfg[sect].has_option("dhcp_listening_device"):
+        if default_dhcp_device and"dhcp_listening_device" not in cfg[sect]:
             cfg[sect]["dhcp_listening_device"] = default_dhcp_device
 
         try:
