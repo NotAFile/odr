@@ -32,7 +32,7 @@ import time
 import weakref
 from configparser import ConfigParser
 from functools import partial
-from ipaddress import IPv4Network, IPv6Network
+from ipaddress import IPv4Network, IPv4Address, IPv6Network
 from optparse import OptionParser
 from typing import Any, Dict, Iterator, List, Optional, TextIO, Tuple
 
@@ -45,50 +45,20 @@ import odr.listeningsocket
 import odr.ovpn as ovpn
 
 from .cmdconnection import CommandConnection, CommandConnectionListener
-from .config import (cfg_iterate, parse_static_routes_ipv4,
-                     parse_static_routes_ipv6, split_cfg_list)
 from .ovpn_config import OvpnConf
 from .parse import ParseUsername
+from .config import cfg_iterate
 from .socketloop import SocketLoop
 from .timeoutmgr import TimeoutManager, TimeoutObject
 from .weakmethod import WeakBoundMethod
+from .realmdata import (
+    RealmData,
+    read_realms,
+    RealmDepenencyNotLoaded,
+    get_ip_for_iface,
+)
 
 CONFIG_FILE = '/etc/odr.conf'
-
-
-class RealmData:
-    """A RealmData object contains all data relevant for a specific realm.
-    The attributes are injected at configuration-load-time.
-    """
-
-    def __init__(self, name, parent=None) -> None:
-        self.name = name
-        if parent is not None:
-            self.vid = parent.vid
-            self.dhcp_local_port = parent.dhcp_local_port
-            self.dhcp_listening_device = parent.dhcp_listening_device
-            self.dhcp_listening_ip = parent.dhcp_listening_ip
-            self.provide_default_route = parent.provide_default_route
-            self.default_gateway_ipv4 = parent.default_gateway_ipv4
-            self.subnet_ipv6 = parent.subnet_ipv6
-            self.default_gateway_ipv6 = parent.default_gateway_ipv6
-            self.static_routes_ipv4 = parent.static_routes_ipv4
-            self.static_routes_ipv6 = parent.static_routes_ipv6
-            self.dhcp_server_ips = parent.dhcp_server_ips
-            self.expected_dhcp_lease_time = parent.expected_dhcp_lease_time
-        else:
-            self.vid = None
-            self.dhcp_local_port = 67
-            self.dhcp_listening_device = None
-            self.dhcp_listening_ip = None
-            self.provide_default_route = True
-            self.default_gateway_ipv4 = None
-            self.subnet_ipv6 = None
-            self.default_gateway_ipv6 = None
-            self.static_routes_ipv4 = None
-            self.static_routes_ipv6 = None
-            self.dhcp_server_ips = None
-            self.expected_dhcp_lease_time = None
 
 
 class OvpnClient:
@@ -280,7 +250,8 @@ class OvpnClientManager:
         if client.full_username in self._clients_by_username:
             self._log.info(
                 'replacing client connection in client list with freshly connected '
-                ' client instance: %s', client,
+                ' client instance: %s',
+                client,
             )
             self._del_client(self._clients_by_username[client.full_username])
         else:
@@ -433,7 +404,11 @@ class OvpnClientManager:
             lease_timeout=None,
         )
 
-M_DHCP_REQUEST_SUCCESS_COUNT = Counter("dhcp_request_success_count", "number of successful dhcp requests", ("realm",))
+
+M_DHCP_REQUEST_SUCCESS_COUNT = Counter(
+    "dhcp_request_success_count", "number of successful dhcp requests", ("realm",)
+)
+
 
 class OvpnCmdConn(CommandConnection):
     """Represents an incoming command connection from one of the OpenVPN
@@ -687,6 +662,12 @@ class OvpnCmdConn(CommandConnection):
         self._ret_f = ret_f
         self._config_f = config_f
 
+        target_addr: Optional[IPv4Address]
+        if realm_data.subnet_ipv4:
+            target_addr = IPv4Network(realm_data.subnet_ipv4).network_address
+        else:
+            target_addr = None
+
         try:
             self._add_request(
                 success_handler_clb=self._success_handler,
@@ -695,6 +676,7 @@ class OvpnCmdConn(CommandConnection):
                 device=realm_data.dhcp_listening_device,
                 local_ip=realm_data.dhcp_listening_ip,
                 server_ips=realm_data.dhcp_server_ips,
+                target_addr=target_addr,
                 lease_time=realm_data.expected_dhcp_lease_time,
             )
         except Exception:
@@ -719,6 +701,8 @@ class OvpnCmdConn(CommandConnection):
 
         self.send_cmd('OK')
         self._remove_client(full_username, server)
+
+
 def user_to_uid(user) -> int:
     """Transforms a user to a UID.  In case the user is already a UID, the
     UID is passed through unchanged.
@@ -753,137 +737,6 @@ def group_to_gid(group) -> int:
             logging.critical('could not resolve group "%s", exiting', group)
             sys.exit(1)
     return gid
-
-
-def get_ip_for_iface(iface) -> str:
-    """Look up an IPv4 address on the given interface.
-    @param iface: Interface name
-    @return: Returns the IPv4 address as string.
-    """
-    import netifaces
-
-    addrs = netifaces.ifaddresses(iface)
-    if (
-        netifaces.AF_INET not in addrs
-        or len(addrs[netifaces.AF_INET]) == 0
-        or 'addr' not in addrs[netifaces.AF_INET][0]
-    ):
-        raise RuntimeError('Could not detect IPv4 address on interface "%s"' % iface)
-    return addrs[netifaces.AF_INET][0]['addr']
-
-
-def process_realm(cfg: ConfigParser, realm_name, realms, delayed_realms) -> None:
-    sect = 'realm %s' % realm_name
-
-    logging.debug('processing realm "%s"', realm_name)
-    parent_realm_name = cfg.get(sect, 'include_realm', fallback=None)
-    if parent_realm_name is not None:
-        # Is the realm we depend on already loaded?
-        if parent_realm_name not in realms:
-            logging.debug(
-                'processing of realm "%s" delayed, because of dependency on "%s"',
-                realm_name,
-                parent_realm_name,
-            )
-            # No, so delay loading this realm and try again later.
-            delayed_realms.append(realm_name)
-            return
-        realm_data = RealmData(realm_name, parent=realms[parent_realm_name])
-    else:
-        realm_data = RealmData(realm_name)
-
-    realms[realm_name] = realm_data
-
-    realm_data.vid = cfg.getint(sect, 'vid', fallback=realm_data.vid)
-
-    realm_data.dhcp_local_port = cfg.getint(
-        sect, 'dhcp_local_port', fallback=realm_data.dhcp_local_port
-    )
-
-    if cfg.has_option(sect, 'dhcp_listening_device'):
-        realm_data.dhcp_listening_device = cfg.get(sect, 'dhcp_listening_device')
-        # If a device is explicitly set, the listening IP needs to be explicitly
-        # set too (or the implicit detection needs to be performed again).
-        realm_data.dhcp_listening_ip = None
-
-    realm_data.dhcp_listening_ip = cfg.get(
-        sect, 'dhcp_listening_ip', fallback=realm_data.dhcp_listening_ip
-    )
-
-    realm_data.provide_default_route = cfg.getboolean(
-        sect, 'provide_default_route', fallback=realm_data.provide_default_route
-    )
-
-    realm_data.default_gateway_ipv4 = cfg.get(
-        sect, 'default_gateway_ipv4', fallback=realm_data.default_gateway_ipv4
-    )
-
-    realm_data.subnet_ipv6 = cfg.get(
-        sect, 'subnet_ipv6', fallback=realm_data.subnet_ipv6
-    )
-
-    realm_data.default_gateway_ipv6 = cfg.get(
-        sect, 'default_gateway_ipv6', fallback=realm_data.default_gateway_ipv6
-    )
-
-    if cfg.has_option(sect, 'static_routes_ipv4'):
-        realm_data.static_routes_ipv4 = parse_static_routes_ipv4(
-            cfg.get(sect, 'static_routes_ipv4')
-        )
-
-    if cfg.has_option(sect, 'static_routes_ipv6'):
-        realm_data.static_routes_ipv6 = parse_static_routes_ipv6(
-            cfg.get(sect, 'static_routes_ipv6')
-        )
-
-    if (
-        realm_data.dhcp_listening_device is not None
-        and realm_data.dhcp_listening_ip is None
-    ):
-        # We need to determine an IPv4 address on the specified network
-        # device.
-        realm_data.dhcp_listening_ip = get_ip_for_iface(
-            realm_data.dhcp_listening_device
-        )
-
-    if cfg.has_option(sect, 'dhcp_server_ips'):
-        realm_data.dhcp_server_ips = [
-            socket.gethostbyname(i.strip())
-            for i in cfg.get(sect, 'dhcp_server_ips').split(',')
-        ]
-
-    realm_data.expected_dhcp_lease_time = cfg.getint(
-        sect, 'expected_dhcp_lease_time', fallback=realm_data.expected_dhcp_lease_time
-    )
-
-
-def read_realms(cfg) -> Optional[Dict[str, RealmData]]:
-    """Read all realms from the configuration file into a dictionary of
-    RealmData objects.
-    """
-    realms = {}  # type: Dict[str, RealmData]
-
-    delayed_realms = []  # type: List[str]
-    for sect, realm_name in cfg_iterate(cfg, 'realm'):
-        process_realm(cfg, realm_name, realms, delayed_realms)
-
-    # Did we have any delays, due to dependencies between realms?  Process them
-    # now.
-    while len(delayed_realms) > 0:
-        new_delayed_realms = []  # type: List[str]
-        for delayed_realm in delayed_realms:
-            process_realm(cfg, delayed_realm, realms, new_delayed_realms)
-
-        # In case nothing changed, we have a dependency loop.
-        if len(delayed_realms) == len(new_delayed_realms):
-            logging.error(
-                'realm error: apparently recursive include '
-                'relationships between: %s',
-                ', '.join(delayed_realms),
-            )
-            return None
-        delayed_realms = new_delayed_realms
-    return realms
 
 
 def drop_caps(user=None, group=None, caps=None) -> None:
@@ -1043,7 +896,11 @@ def main() -> None:
             caps=['net_raw', 'net_bind_service'],
         )
 
-    realms_data = read_realms(cfg)
+    default_dhcp_device = cfg.get(
+        'daemon', 'default_dhcp_listening_device', fallback=None
+    )
+
+    realms_data = read_realms(cfg, default_dhcp_device)
     if realms_data is None:
         sys.exit(1)
 
@@ -1096,9 +953,7 @@ def main() -> None:
         )
         requestor.add_request(request)
 
-    parse_username = ParseUsername(
-        default_realm=cfg.get('daemon', 'default_realm')
-    )
+    parse_username = ParseUsername(default_realm=cfg.get('daemon', 'default_realm'))
 
     client_mgr = OvpnClientManager(
         timeout_mgr=timeout_mgr,

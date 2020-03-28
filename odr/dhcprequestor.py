@@ -30,6 +30,10 @@ from odr.timeoutmgr import TimeoutManager, TimeoutObject
 from pydhcplib.dhcp_packet import DhcpPacket
 
 
+DHCP_SUBOPTION_LINKSEL = 5
+DHCP_SUBOPTION_LINKSEL_LEN = 4
+
+
 class DhcpAddressRequest:
     """Represents the request for an IP address (and additional settings
     relevant for the target network) based on a MAC address.
@@ -59,6 +63,7 @@ class DhcpAddressRequest:
         local_ip: str,
         client_identifier: str,
         server_ips: Iterable[str],
+        target_addr: str = None,
         max_retries: int = 3,
         timeout: int = 4,
         lease_time: int = None
@@ -83,6 +88,9 @@ class DhcpAddressRequest:
                 client for which an IP address is requested.
         :ivar server_ips: A list of IP addresses to which the DHCP requests
                 should be sent.
+        :ivar target_addr: An address specifying the subnet to send the reqest
+                for, which will be sent to the DHCP server using the link
+                selection option descriped in RFC 3527
         :ivar max_retries: The maximum number of retries after timeouts.
                 Defaults to 2 retries.
         :ivar timeout: Number of seconds to wait for a DHCP response before
@@ -98,6 +106,7 @@ class DhcpAddressRequest:
         self._local_ip = IPv4Address(local_ip)
         self._client_identifier = client_identifier.encode("utf-8")
         self._server_ips = [IPv4Address(ip) for ip in server_ips]
+        self._target_addr = IPv4Address(target_addr) if target_addr else None
         self._max_retries = max_retries
         self._initial_timeout = timeout
         self._lease_time = lease_time
@@ -136,6 +145,13 @@ class DhcpAddressRequest:
 
         # We're the gateway.
         packet.SetOption("giaddr", self._local_ip.packed)
+
+        if self._target_addr:
+            packet.SetOption(
+                "relay_agent",
+                bytes((DHCP_SUBOPTION_LINKSEL, DHCP_SUBOPTION_LINKSEL_LEN))
+                + self._target_addr.packed,
+            )
 
         # Request IP address, etc. for the following client identifier.
         packet.SetOption("client_identifier", self._client_identifier)
