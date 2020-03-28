@@ -47,7 +47,7 @@ import odr.ovpn as ovpn
 from .cmdconnection import CommandConnection, CommandConnectionListener
 from .ovpn_config import OvpnConf
 from .parse import ParseUsername
-from .config import cfg_iterate
+from .config import cfg_iterate, split_cfg_list
 from .socketloop import SocketLoop
 from .timeoutmgr import TimeoutManager, TimeoutObject
 from .weakmethod import WeakBoundMethod
