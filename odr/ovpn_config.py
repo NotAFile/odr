@@ -6,6 +6,7 @@ from itertools import chain
 
 from typing import Iterable
 
+
 def config_escape(option: str) -> str:
     """escape a single value as required by openvpn"""
     # escape backslashes
@@ -17,11 +18,14 @@ def config_escape(option: str) -> str:
 
     return option
 
+
 def make_config_line(values: Iterable[str]) -> str:
     return " ".join(config_escape(val) for val in values)
 
+
 class OvpnConf:
     """construct an openvpn config"""
+
     def __init__(self):
         self.lines = []
 

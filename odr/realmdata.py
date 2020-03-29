@@ -74,9 +74,7 @@ class RealmDepenencyNotLoaded(Exception):
 
 
 def process_realm(
-    cfg: SectionProxy,
-    realm_name: str,
-    realms: Dict[str, RealmData],
+    cfg: SectionProxy, realm_name: str, realms: Dict[str, RealmData],
 ) -> RealmData:
     """take a realm config section and turn it into RealmData, resolving
     interfaces and addresses as needed"""
@@ -161,7 +159,9 @@ def process_realm(
     return realm_data
 
 
-def read_realms(cfg: ConfigParser, default_dhcp_device = None) -> Optional[Dict[str, RealmData]]:
+def read_realms(
+    cfg: ConfigParser, default_dhcp_device=None
+) -> Optional[Dict[str, RealmData]]:
     """Read all realms from the configuration file into a dictionary of
     RealmData objects.
     """
@@ -172,7 +172,7 @@ def read_realms(cfg: ConfigParser, default_dhcp_device = None) -> Optional[Dict[
         sect = 'realm ' + realm_name
 
         # this is the least ugly way to do this, sadly
-        if default_dhcp_device and"dhcp_listening_device" not in cfg[sect]:
+        if default_dhcp_device and "dhcp_listening_device" not in cfg[sect]:
             cfg[sect]["dhcp_listening_device"] = default_dhcp_device
 
         try:
