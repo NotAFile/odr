@@ -140,6 +140,12 @@ class OvpnClient:
             self.server.disconnect_client(self.full_username)
             return
 
+        target_addr: Optional[IPv4Address]
+        if self._realm_data.subnet_ipv4:
+            target_addr = IPv4Network(self._realm_data.subnet_ipv4).network_address
+        else:
+            target_addr = None
+
         try:
             self._refresh_lease(
                 success_handler_clb=self._handle_lease_refresh_succeeded,
@@ -148,6 +154,7 @@ class OvpnClient:
                 device=self._realm_data.dhcp_listening_device,
                 local_ip=self._realm_data.dhcp_listening_ip,
                 server_ips=self._realm_data.dhcp_server_ips,
+                target_addr=target_addr,
                 client_ip=self._leased_ip_address,
                 lease_time=self._realm_data.expected_dhcp_lease_time,
             )
