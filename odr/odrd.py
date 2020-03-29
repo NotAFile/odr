@@ -496,17 +496,37 @@ class OvpnCmdConn(CommandConnection):
         """
         self._log.debug('DHCP request succeeded: %s', repr(res))
 
-        if 'ip_address' not in res or 'subnet_mask' not in res:
-            self._log.error(
-                'DHCP request failed to provide a valid IP ' 'address: %r', res
-            )
+        try:
+            conf = self._make_config(res)
+        except ValueError:
+            self._log.exception("dhcp request failed")
             self._write_ret(ovpn.CC_RET_FAILED)
             return
 
+        self._config_f.seek(0)
+        self._config_f.write(conf.to_text())
+        self._config_f.flush()
+
+        os.fsync(self._config_f.fileno())
+
+        self._write_ret(ovpn.CC_RET_SUCCEEDED)
+
+        self._create_client(
+            full_username=self._full_username,
+            server=self._server,
+            realm_data=self._realm_data,
+            leased_ip_address=res['ip_address'],
+            rebinding_timeout=res['rebinding_timeout'],
+            lease_timeout=res['lease_timeout'],
+        )
+
+
+    def _make_config(self, res) -> OvpnConf:
+        if 'ip_address' not in res or 'subnet_mask' not in res:
+            raise ValueError(f'DHCP request failed to provide a valid IP address: {res}')
+
         if 'rebinding_timeout' not in res or 'lease_timeout' not in res:
-            self._log.error('DHCP request without lease indication: %r', res)
-            self._write_ret(ovpn.CC_RET_FAILED)
-            return
+            raise ValueError(f'DHCP request without lease indication: {res}')
 
         self._log.debug('writing OpenVPN client configuration')
         assert self._config_f is not None and self._realm_data is not None
@@ -580,21 +600,7 @@ class OvpnCmdConn(CommandConnection):
         if 'domain' in res:
             conf.push_dhcp_option("DOMAIN", res["domain"])
 
-        self._config_f.seek(0)
-        self._config_f.write(conf.to_text())
-        self._config_f.flush()
-        os.fsync(self._config_f.fileno())
-
-        self._write_ret(ovpn.CC_RET_SUCCEEDED)
-
-        self._create_client(
-            full_username=self._full_username,
-            server=self._server,
-            realm_data=self._realm_data,
-            leased_ip_address=res['ip_address'],
-            rebinding_timeout=res['rebinding_timeout'],
-            lease_timeout=res['lease_timeout'],
-        )
+        return conf
 
     def _failure_handler(self) -> None:
         """Called as soon as the DHCP address request has failed or timed out.
