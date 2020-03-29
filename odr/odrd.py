@@ -17,6 +17,7 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
+import asyncio
 import datetime
 import grp
 import hashlib
@@ -923,7 +924,14 @@ def main() -> None:
     signal.signal(signal.SIGHUP, signal.SIG_IGN)
 
     timeout_mgr = TimeoutManager()
-    sloop.add_idle_handler(timeout_mgr.check_timeouts)
+
+    # integrate the old timeout code with aio socket loop
+    async def check_timeouts():
+        while True:
+            timeout_mgr.check_timeouts()
+            await asyncio.sleep(0.5)
+
+    sloop.aio_loop.create_task(check_timeouts())
 
     requestor_mgr = odr.dhcprequestor.DhcpAddressRequestorManager()
 
