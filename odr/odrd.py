@@ -246,7 +246,7 @@ class OvpnClientManager:
         client = OvpnClient(
             timeout_mgr=self._timeout_mgr,
             refresh_lease_clb=self._refresh_lease,
-            **kwargs
+            **kwargs,
         )
         client.track_lease()
         self._add_client(client)
@@ -520,10 +520,11 @@ class OvpnCmdConn(CommandConnection):
             lease_timeout=res['lease_timeout'],
         )
 
-
     def _make_config(self, res) -> OvpnConf:
         if 'ip_address' not in res or 'subnet_mask' not in res:
-            raise ValueError(f'DHCP request failed to provide a valid IP address: {res}')
+            raise ValueError(
+                f'DHCP request failed to provide a valid IP address: {res}'
+            )
 
         if 'rebinding_timeout' not in res or 'lease_timeout' not in res:
             raise ValueError(f'DHCP request without lease indication: {res}')
@@ -958,7 +959,7 @@ def main() -> None:
             timeout_mgr=weakref.proxy(timeout_mgr),
             requestor=weakref.proxy(requestor),
             local_ip=local_ip,
-            **kwargs
+            **kwargs,
         )
         requestor.add_request(request)
 
@@ -970,7 +971,7 @@ def main() -> None:
             timeout_mgr=weakref.proxy(timeout_mgr),
             requestor=weakref.proxy(requestor),
             local_ip=local_ip,
-            **kwargs
+            **kwargs,
         )
         requestor.add_request(request)
 
