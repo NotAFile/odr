@@ -49,7 +49,6 @@ from .cmdconnection import CommandConnection, CommandConnectionListener
 from .ovpn_config import OvpnConf
 from .parse import ParseUsername
 from .config import cfg_iterate, split_cfg_list
-from .socketloop import SocketLoop
 from .timeoutmgr import TimeoutManager, TimeoutObject
 from .weakmethod import WeakBoundMethod
 from .realmdata import (
@@ -425,7 +424,7 @@ class OvpnCmdConn(CommandConnection):
 
     def __init__(
         self,
-        sloop,
+        loop,
         sock,
         realms_data,
         servers,
@@ -436,7 +435,7 @@ class OvpnCmdConn(CommandConnection):
         remove_client_clb,
     ) -> None:
         """\
-        @param sloop: Socket loop instance.  (See CommandConnection for
+        @param loop: Socket loop instance.  (See CommandConnection for
             details.)
         @param sock: Socket of the command connection.  (See CommandConnection
             for details.)
@@ -452,7 +451,7 @@ class OvpnCmdConn(CommandConnection):
             client instance.
         """
         CommandConnection.__init__(
-            self, sloop=sloop, sock=sock, log=logging.getLogger('ovpncmdconn')
+            self, loop=loop, sock=sock, log=logging.getLogger('ovpncmdconn')
         )
         self._realms_data = realms_data
         self._servers = servers
@@ -795,23 +794,23 @@ def drop_caps(user=None, group=None, caps=None) -> None:
     prctl.cap_inheritable.limit()
 
 
-def read_servers(cfg: ConfigParser, sloop) -> Dict[str, ovpn.OvpnServer]:
+def read_servers(cfg: ConfigParser, loop) -> Dict[str, ovpn.OvpnServer]:
     """Read all servers from the configuration file and connect to each of
     them.
     """
     servers = {}
     for sect, server_name in cfg_iterate(cfg, 'ovpn-server'):
         server = ovpn.OvpnServer(
-            sloop, name=server_name, socket_fn=cfg.get(sect, 'mgmt_socket')
+            loop, name=server_name, socket_fn=cfg.get(sect, 'mgmt_socket')
         )
         servers[server_name] = server
     return servers
 
 
-def load_requestors(sloop, requestor_mgr, realms_data) -> bool:
+def load_requestors(loop, requestor_mgr, realms_data) -> bool:
     """Load all requestors, based on the existing realms.
 
-    @param sloop: Socket loop instance.
+    @param loop: Socket loop instance.
     @param requestor_mgr: Requestor manager instance.
     @param realms_data: Dictionary of all existing realms.
     @return: Returns False in case an error occured while loading the
@@ -830,7 +829,7 @@ def load_requestors(sloop, requestor_mgr, realms_data) -> bool:
                 listen_port=realm_data.dhcp_local_port,
                 listen_device=realm_data.dhcp_listening_device,
             )
-            sloop.add_socket_handler(requestor)
+            loop.add_reader(requestor.socket, requestor.handle_socket)
             requestor_mgr.add_requestor(requestor)
     except odr.listeningsocket.SocketLocalAddressBindFailed as ex:
         logging.error(
@@ -919,13 +918,13 @@ def main() -> None:
     if realms_data is None:
         sys.exit(1)
 
-    sloop = SocketLoop()
+    loop = asyncio.get_event_loop()
 
     def exit_daemon(*args) -> None:
         """Signal handler performing a soft shutdown of the loop.
         """
         logging.info('exiting on signal')
-        sloop.quit()
+        loop.stop()
 
     signal.signal(signal.SIGTERM, exit_daemon)
     signal.signal(signal.SIGHUP, signal.SIG_IGN)
@@ -938,11 +937,11 @@ def main() -> None:
             timeout_mgr.check_timeouts()
             await asyncio.sleep(0.5)
 
-    sloop.aio_loop.create_task(check_timeouts())
+    loop.create_task(check_timeouts())
 
     requestor_mgr = odr.dhcprequestor.DhcpAddressRequestorManager()
 
-    servers = read_servers(cfg, sloop)
+    servers = read_servers(cfg, loop)
 
     for server in servers.values():
         ovpn.OvpnServerSupervisor(
@@ -985,9 +984,9 @@ def main() -> None:
         parse_username_clb=parse_username.parse_username,
     )
 
-    def create_vpn_cmd_conn(sloop, sock) -> OvpnCmdConn:
+    def create_vpn_cmd_conn(loop, sock) -> OvpnCmdConn:
         return OvpnCmdConn(
-            sloop,
+            loop,
             sock,
             realms_data=realms_data,
             servers=servers,
@@ -1017,15 +1016,15 @@ def main() -> None:
     cmd_socket_perms = int(cfg.get('daemon', 'cmd_socket_perms', fallback='0666'), 8)
     for unix_socket_fn in split_cfg_list(cfg.get('daemon', 'cmd_sockets', fallback='')):
         cmd_listener = CommandConnectionListener(
-            sloop=weakref.proxy(sloop),
+            loop=weakref.proxy(loop),
             socket_path=unix_socket_fn,
             cmd_conn_factory=create_vpn_cmd_conn,
             socket_perm_mode=cmd_socket_perms,
             auth_check=cmd_conn_auth_check,
         )
-        sloop.add_socket_handler(cmd_listener)
+        loop.add_reader(cmd_listener.socket, cmd_listener.handle_socket)
 
-    if not load_requestors(sloop, requestor_mgr, realms_data):
+    if not load_requestors(loop, requestor_mgr, realms_data):
         sys.exit(1)
 
     if not options.keep_user:
@@ -1033,9 +1032,12 @@ def main() -> None:
         drop_caps()
 
     try:
-        sloop.run()
+        loop.run_forever()
     except Exception:
         logging.exception('Caught exception in main loop, exiting.')
+    finally:
+        self._loop.run_until_complete(self._loop.shutdown_asyncgens())
+        self._loop.close()
         sys.exit(1)
 
 

@@ -38,15 +38,16 @@ class CommandConnection:
     MAX_NUM_FDS = 8
     MAX_MSG_SIZE = 1024
 
-    def __init__(self, sloop, sock, log, **kwargs):
+    def __init__(self, loop, sock, log, **kwargs):
         """\
-        :ivar sloop: Instance of the socket loop.
+        :ivar loop: Instance of the socket loop.
         :ivar sock: Socket that will be used for communication.
         """
-        self._sloop = sloop
+        self._loop = loop
         self._socket = sock
         self._log = log
-        self._sloop.add_socket_handler(self)
+        # TODO IO in __init__
+        self._loop.add_reader(self.socket, self.handle_socket)
 
     def __del__(self):
         self._log.debug('destructing CommandConnection')
@@ -92,7 +93,7 @@ class CommandConnection:
             self._parse_command(cmd_line, files=files)
         else:
             self._log.debug('closing cmd socket due to EOF')
-            self._sloop.del_socket_handler(self)
+            self._loop.remove_reader(self.socket)
 
     def send_cmd(self, cmd, params={}):
         """Used to send responses back to the client.  Sends the specified
@@ -133,7 +134,7 @@ class CommandConnectionListener:
 
     def __init__(
         self,
-        sloop,
+        loop,
         cmd_conn_factory,
         socket_path,
         socket_perm_mode=0o666,
@@ -143,14 +144,14 @@ class CommandConnectionListener:
         is deleted first.  The file permissions are set according to the
         socket_perm_mode parameter.
 
-        :ivar sloop: Instance of the socket loop.
+        :ivar loop: Instance of the socket loop.
         :ivar cmd_conn_factory: Factory method that gets called with the
                 socket loop instance and the new socket for each new connection.
         :ivar socket_path: Path to the POSIX Local IPC Socket.
         :ivar socket_perm_mode: File access permissions to be set for the
                 file socket.
         """
-        self._sloop = sloop
+        self._loop = loop
         self._socket_path = socket_path
         self._factory = cmd_conn_factory
         self._auth_check = auth_check
@@ -200,7 +201,7 @@ class CommandConnectionListener:
                 )
                 sock.close()
                 return
-        conn = self._factory(sloop=self._sloop, sock=sock)
+        conn = self._factory(loop=self._loop, sock=sock)
 
 
 def getsockpeercred(sock):

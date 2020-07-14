@@ -17,6 +17,7 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
+import asyncio
 import logging
 import os
 import socket
@@ -26,7 +27,6 @@ from typing import Optional, TextIO
 
 from odr.linesocket import LineSocket
 from odr.queue import StateQueue
-from odr.socketloop import SocketLoop
 from odr.timeoutmgr import TimeoutManager
 
 CC_RET_FAILED = 0
@@ -87,13 +87,13 @@ class OvpnServer:
     server (via the management console).
     """
 
-    def __init__(self, sloop: SocketLoop, name: str, socket_fn: str) -> None:
+    def __init__(self, loop: asyncio.AbstractEventLoop, name: str, socket_fn: str) -> None:
         """\
-        @param sloop: Instance of the socket loop.
+        @param loop: AsyncIO event loop.
         @param name: Freely choosable, unique identifier of the server.
         @param socket_fn: Path to the management console's UNIX socket.
         """
-        self._sloop = sloop
+        self._loop = loop
         self._name = name
         self._socket_fn = socket_fn
 
@@ -124,7 +124,7 @@ class OvpnServer:
             'connected to OpenVPN server "%s" at "%s"', self.name, self._socket_fn
         )
         self._socket = LineSocket(sock)
-        self._sloop.add_socket_handler(self)
+        self._loop.add_reader(self._socket, self.handle_socket)
 
         self._cmd_state.add(_OvpnWaitConnectState(self._on_connected))
 
