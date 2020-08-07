@@ -515,7 +515,6 @@ class OvpnCmdConn(CommandConnection):
         conf = OvpnConf()
 
         conf.add("ifconfig-push", res["ip_address"], res["subnet_mask"])
-        conf.push("ip-win32", "dynamic")
 
         if self._realm_data.subnet_ipv6 is not None:
             prefix = self._realm_data.subnet_ipv6
